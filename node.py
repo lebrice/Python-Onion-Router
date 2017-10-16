@@ -57,6 +57,7 @@ def main():
     bob = Node("Bob", "127.0.0.1", 12345)
     bob.say_hello()
     bob.start()
+    bob.stop()
 
 if __name__ == '__main__':
     main()
