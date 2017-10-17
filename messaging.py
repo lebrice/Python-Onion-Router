@@ -4,48 +4,97 @@ Module where message format, encoding and decoding is defined.
 """
 
 import json
+from json import JSONEncoder, JSONDecodeError
 
 
-class OnionMessage:
+class JsonMixin(object):
+    @classmethod
+    def from_json(cls, data):
+        kwargs = json.loads(data)
+        return cls(**kwargs)
+
+    def to_json(self):
+        return json.dumps(self.to_dict())
+
+    @classmethod
+    def is_valid_json_string(cls, string):
+        try:
+            bob = cls.from_json(string)
+            return True
+        except JSONDecodeError:
+            print("not a valid JSON.")
+            return False
+        except TypeError as err:
+            print("Error: JSON does not match required arguments:", err)
+            return False
+
+
+class ToDictMixin(object):
+    """ Mixin for converting an object to a dictionary """
+    def to_dict(self):
+        return self._traverse_dict(self.__dict__)
+
+    def _traverse_dict(self, instance_dict):
+        output = {}
+        for key, value in instance_dict.items():
+            output[key] = self._traverse(key, value)
+        return output
+
+    def _traverse(self, key, value):
+        if isinstance(value, ToDictMixin):
+            return value.to_dict()
+        elif isinstance(value, dict):
+            return self._traverse_dict(value)
+        elif isinstance(value, list):
+            return [self._traverse(key, v) for v in value]
+        elif hasattr(value, '__dict__'):
+            return self._traverse_dict(value.__dict__)
+        else:
+            return value
+
+
+class OnionMessage(ToDictMixin, JsonMixin):
     """
     Represents a message in the onion routing network.
     """
 
-    header = "ONION ROUTING G12"
+    HOME = "127.0.0.1"
+    HEADER = "ONION ROUTING G12"
 
-    def __init__(self, source="127.0.0.1", destination="", data=None, header=header):
+    def __init__(self,
+                 source=HOME,
+                 destination="",
+                 data=None,
+                 header=HEADER,
+                 ):
+        self.header = header
         self.source = source
         self.destination = destination
         self.data = data
 
-    @property
-    def json(self):
-        return self._to_json()
-
-    def _to_json(self):
-        template = f"""
-        {{
-            "header": "{self.header}",
-            "source": "{self.source}",
-            "destination": "{self.destination}"
-        }}
-        """
-        return json.loads(template)
-
     def to_string(self):
-        return json.dumps(self.json)
+        """
+        Returns a Json-formatted string representation of the message.
+        """
+        return str(self.to_json())
 
     def to_bytes(self):
         return self.to_string().encode()
 
-    @classmethod
-    def from_string(cls, str_or_bytes):
-        return cls(**json.loads(str_or_bytes))
-
 
 def main():
     message1 = OnionMessage()
-    print(message1.to_string())
+
+    str1 = message1.to_string()
+
+    json1 = json.loads(str1)
+
+    # message2 = OnionMessage.from_json(json1)
+
+    bob = """{"header": "ONION ROUTING G12", "source": "127.0.0.1", "destination": "", "data": null, "afwe": 1}"""
+    print(OnionMessage.is_valid_json_string(bob))
+    # bytes1 = str1.encode()
+    print(str1)
 
 if __name__ == '__main__':
     main()
