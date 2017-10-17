@@ -9,7 +9,7 @@ from json import JSONEncoder, JSONDecodeError
 
 class JsonMixin(object):
     @classmethod
-    def from_json(cls, data):
+    def from_json_string(cls, data):
         kwargs = json.loads(data)
         return cls(**kwargs)
 
@@ -19,13 +19,13 @@ class JsonMixin(object):
     @classmethod
     def is_valid_json_string(cls, string):
         try:
-            bob = cls.from_json(string)
+            bob = cls.from_json_string(string)
             return True
-        except JSONDecodeError:
-            print("not a valid JSON.")
+        except JSONDecodeError as err:
+            # print("Error: Provided string is not a valid JSON.", err)
             return False
         except TypeError as err:
-            print("Error: JSON does not match required arguments:", err)
+            # print("Error: JSON does not match required arguments:", err)
             return False
 
 
@@ -84,17 +84,22 @@ class OnionMessage(ToDictMixin, JsonMixin):
 
 def main():
     message1 = OnionMessage()
-
     str1 = message1.to_string()
 
     json1 = json.loads(str1)
+    # json1 = OnionMessage.from_json(str1)
+    message2 = OnionMessage.from_json_string(str1)
 
-    # message2 = OnionMessage.from_json(json1)
-
-    bob = """{"header": "ONION ROUTING G12", "source": "127.0.0.1", "destination": "", "data": null, "afwe": 1}"""
-    print(OnionMessage.is_valid_json_string(bob))
-    # bytes1 = str1.encode()
-    print(str1)
+    bob = """
+    {
+        "header": "ONION ROUTING G12", 
+        "source": "127.0.0.1",
+        "destination": "",
+        "data": null,
+        "afwe": 1
+    }
+    """
+    assert not OnionMessage.is_valid_json_string(bob)
 
 if __name__ == '__main__':
     main()
