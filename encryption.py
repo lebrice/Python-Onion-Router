@@ -1,14 +1,107 @@
 #!/usr/bin/python3
 
+import sys
+import math
+
 
 class Encriptor:
     """Class responsible for encrypting and decrypting messages"""
-    def encrypt(self, message, key):
+    def encrypt(message, key):
         """Encode a message using the given key"""
         # TODO: encrypt the message using the key.
-        return message
+        raise NotImplementedError()
 
-    def decrypt(self, message, key):
+    def decrypt(message, key):
         """Decode a message using the given key"""
-        # TODO: encrypt the message using the key.
-        return message
+        # TODO: encrypt the message using the key.S
+        raise NotImplementedError()
+
+
+class SimpleAdditionEncriptor(Encriptor):
+    """Simply adds and subtracts the key to the message"""
+    def encrypt(message, key):
+        int_value = _to_int(message)
+        int_key = _to_int(key)
+        encripted_int = int_value + int_key
+        # encripted_string = _to_string(encripted_int)
+        encripted_bytes = _to_bytes(encripted_int)
+        return encripted_bytes
+        # encripted_string = str(encripted_bytes, encoding='UTF-8')
+        # return encripted_string
+
+    def decrypt(message, key):
+        int_value = _to_int(message)
+        int_key = _to_int(key)
+        decripted_int = int_value - int_key
+        decripted_bytes = _to_bytes(decripted_int)
+        decripted_message = str(decripted_bytes, encoding='utf-8')
+        return decripted_message
+
+
+def main():
+    import sys
+
+    # text1 = "hello"
+    # bytes1 = text1.encode(encoding='UTF-8')
+    # int1 = int.from_bytes(bytes1, byteorder=sys.byteorder)
+    # length = int1.bit_length()
+    # int2 = int1 + 12345
+    # bytes2 = int2.to_bytes(int(length / 8) + 1, byteorder=sys.byteorder)
+
+    # text2 = str(bytes2)
+    # # bytes3 = text2.encode()
+
+    # int3 = int.from_bytes(bytes2, byteorder=sys.byteorder)
+    # length = int3.bit_length()
+    # int4 = int3 - 12345
+    # bytes4 = int4.to_bytes(int(length / 8) + 1, byteorder=sys.byteorder)
+    # text3 = str(bytes4, encoding='UTF-8')
+
+    # print(text1 + "(original message)", bytes1, int1, int2, bytes2, text2 + "(encripted message)", sep="\n")
+    # print(int3, int4, bytes4, text3 + "(decripted message)", sep="\n")
+
+    text1 = "hello!!"
+    key = 123
+    encripted = SimpleAdditionEncriptor.encrypt(text1, key)
+    print(f"encripted string: $-->{encripted}<--")
+    decripted = SimpleAdditionEncriptor.decrypt(encripted, key)
+
+    print(text1, encripted, decripted, sep='\n')
+
+
+def _to_string(data):
+    if isinstance(data, str):
+        return data
+    elif isinstance(data, bytes):
+        return data.decode()
+    # Import the object types we will check for
+    import messaging
+    if isinstance(data, messaging.OnionMessage):
+        return str(data)
+    return str(data)
+
+
+def _to_bytes(data, encoding='utf-8'):
+    if isinstance(data, bytes):
+        return data
+    elif isinstance(data, str):
+        return data.encode(encoding)
+    elif isinstance(data, int):
+        byte_length = math.ceil(data.bit_length() / 8)
+        return data.to_bytes(byte_length, byteorder=sys.byteorder)
+    import messaging
+    # Import the object types we will check for
+    if isinstance(data, messaging.OnionMessage):
+        return str(data).encode(encoding)
+    return bytes(data)
+
+
+def _to_int(data):
+    if isinstance(data, int):
+        return data
+    bytes_value = _to_bytes(data)
+    return int.from_bytes(bytes_value, byteorder=sys.byteorder)
+
+
+if __name__ == '__main__':
+    main()
