@@ -48,33 +48,10 @@ class SimpleAdditionEncriptor(Encriptor):
 
 
 def main():
-    import sys
-
-    # text1 = "hello"
-    # bytes1 = text1.encode(encoding='UTF-8')
-    # int1 = int.from_bytes(bytes1, byteorder=sys.byteorder)
-    # length = int1.bit_length()
-    # int2 = int1 + 12345
-    # bytes2 = int2.to_bytes(int(length / 8) + 1, byteorder=sys.byteorder)
-
-    # text2 = str(bytes2)
-    # # bytes3 = text2.encode()
-
-    # int3 = int.from_bytes(bytes2, byteorder=sys.byteorder)
-    # length = int3.bit_length()
-    # int4 = int3 - 12345
-    # bytes4 = int4.to_bytes(int(length / 8) + 1, byteorder=sys.byteorder)
-    # text3 = str(bytes4, encoding='UTF-8')
-
-    # print(text1 + "(original message)", bytes1, int1, int2, bytes2, text2 + "(encripted message)", sep="\n")
-    # print(int3, int4, bytes4, text3 + "(decripted message)", sep="\n")
-
     text1 = "hello!!"
     key = 123
     encripted = SimpleAdditionEncriptor.encrypt(text1, key)
-    print(f"encripted string: $-->{encripted}<--")
     decripted = SimpleAdditionEncriptor.decrypt(encripted, key)
-
     print(text1, encripted, decripted, sep='\n')
 
 
