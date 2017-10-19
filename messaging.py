@@ -7,17 +7,24 @@ import json
 from json import JSONEncoder, JSONDecodeError
 
 
-class JsonMixin(object):
+class JsonConversionMixin(object):
+    """
+    Defines a base class that can be converted to/from json.
+
+    The class :must: have a *to_dict(self)* method, and a constructor
+    accepting all required object fields as keyword arguments.
+    """
     @classmethod
-    def from_json_string(cls, data):
-        kwargs = json.loads(data)
+    def from_json_string(cls, string):
+        """
+        Transforms the given String or bytes into an instance of the class
+        string: - a valid JSON with all required fields
+        """
+        kwargs = json.loads(string)
         return cls(**kwargs)
 
-    def to_json(self):
-        return json.dumps(self.to_dict())
-
     @classmethod
-    def is_valid_json_string(cls, string):
+    def is_valid_string(cls, string):
         try:
             bob = cls.from_json_string(string)
             return True
@@ -27,6 +34,12 @@ class JsonMixin(object):
         except TypeError as err:
             # print("Error: JSON does not match required arguments:", err)
             return False
+
+    def to_json_string(self):
+        """
+        Serializes the object into a JSON-formatted string
+        """
+        return json.dumps(self.to_dict())
 
 
 class ToDictMixin(object):
@@ -53,7 +66,7 @@ class ToDictMixin(object):
             return value
 
 
-class OnionMessage(ToDictMixin, JsonMixin):
+class OnionMessage(ToDictMixin, JsonConversionMixin):
     """
     Represents a message in the onion routing network.
     """
@@ -72,34 +85,11 @@ class OnionMessage(ToDictMixin, JsonMixin):
         self.destination = destination
         self.data = data
 
-    def to_string(self):
+    def __repr__(self):
         """
         Returns a Json-formatted string representation of the message.
         """
-        return str(self.to_json())
+        return self.to_json_string()
 
     def to_bytes(self):
         return self.to_string().encode()
-
-
-def main():
-    message1 = OnionMessage()
-    str1 = message1.to_string()
-
-    json1 = json.loads(str1)
-    # json1 = OnionMessage.from_json(str1)
-    message2 = OnionMessage.from_json_string(str1)
-
-    bob = """
-    {
-        "header": "ONION ROUTING G12", 
-        "source": "127.0.0.1",
-        "destination": "",
-        "data": null,
-        "afwe": 1
-    }
-    """
-    assert not OnionMessage.is_valid_json_string(bob)
-
-if __name__ == '__main__':
-    main()
