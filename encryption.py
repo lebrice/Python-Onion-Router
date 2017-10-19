@@ -22,19 +22,28 @@ class SimpleAdditionEncriptor(Encriptor):
     def encrypt(message, key):
         int_value = _to_int(message)
         int_key = _to_int(key)
-        encripted_int = int_value + int_key
-        # encripted_string = _to_string(encripted_int)
+        encripted_int = int_value + int_key * 2  # See TODO below.
         encripted_bytes = _to_bytes(encripted_int)
         return encripted_bytes
-        # encripted_string = str(encripted_bytes, encoding='UTF-8')
+        """
+        TODO: Figure out a way of passing the messages as strings instead of
+        bytes. We are currently dependant on having the right key in order to
+        be able to decrypt the message into a string. If we don't use the right
+        key, the continuation bits are messed up and attempting to decode
+        the string produces an error.
+
+        For now, shifting the key to the left a bit helps, since the first bit
+        isn't messed up as often. However, this must be fixed.
+        """
+        # encripted_string = _to_string(encripted_int)
         # return encripted_string
 
     def decrypt(message, key):
         int_value = _to_int(message)
         int_key = _to_int(key)
-        decripted_int = int_value - int_key
+        decripted_int = int_value - int_key * 2
         decripted_bytes = _to_bytes(decripted_int)
-        decripted_message = str(decripted_bytes, encoding='utf-8')
+        decripted_message = _to_string(decripted_bytes)
         return decripted_message
 
 
