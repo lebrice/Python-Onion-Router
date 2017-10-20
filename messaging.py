@@ -92,4 +92,4 @@ class OnionMessage(ToDictMixin, JsonConversionMixin):
         return self.to_json_string()
 
     def to_bytes(self):
-        return self.to_string().encode()
+        return str(self).encode()
