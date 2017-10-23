@@ -100,23 +100,27 @@ class SocketReader(Thread):
             recv_socket.listen(5)
 
             while self.running:
+                # print("starting")
                 client_socket, address = recv_socket.accept()
                 received_string = ""
                 empty = False
-                while not empty:
+
+                while self.running and not empty:
                     buffer = client_socket.recv(1024)
-                    empty = buffer == b''
-                    print("received: ", buffer, "\nEmpty:", empty)
+                    empty = buffer is ""
                     string = str(buffer, encoding='UTF-8')
                     received_string += string
                 
-                # print("Received string:", received_string)
-                objects = split_into_objects(received_string)
-                for obj in split_into_objects(received_string):
-                    self.out_queue.put(obj)
-                    self.out_queue.task_done()
-                    # print("received_object: ", obj)
+                print("Received string:", received_string)
 
+                objects = split_into_objects(received_string)
+                count = 0
+                for obj in objects:
+                    self.out_queue.put(obj)
+                    count += 1
+                    print("received_object: ", obj)
+
+                print(f"done receiving {count} objects for this connection.")
                 client_socket.close()
 
     def stop(self):
@@ -163,25 +167,26 @@ class SocketWriter(Thread):
         self.in_queue = in_queue
         self.ip_address = ip_address
         self.port = port
-        self.out_socket = socket.socket()
 
         self.sent_count = 0
 
     def run(self):
-        self.out_socket.connect((self.ip_address, self.port))
-        for message in self.in_queue:
-            string_version = str(message)
-            bytes_to_send = string_version.encode()
-            total_length = len(bytes_to_send)
-            sent_so_far = 0
-            # print("sending:", string_version)
-            while sent_so_far < total_length:
-                bytes_sent = self.out_socket.send(bytes_to_send[sent_so_far:])
-                sent_so_far += bytes_sent
-                print("sent_so_far:", sent_so_far)
-            self.sent_count += 1
-            print(f"successfully sent message #{self.sent_count}")
-        print(f"done sending all {self.sent_count} messages.")
+        with socket.socket() as out_socket:
+            out_socket.connect((self.ip_address, self.port))
+
+            for message in self.in_queue:
+                string_version = str(message)
+                bytes_to_send = string_version.encode()
+                total_length = len(bytes_to_send)
+                sent_so_far = 0
+                print("sending:", string_version)
+                while sent_so_far < total_length:
+                    bytes_sent = out_socket.send(bytes_to_send[sent_so_far:])
+                    sent_so_far += bytes_sent
+                    # print("sent_so_far:", sent_so_far)
+                self.sent_count += 1
+                print(f"successfully sent message #{self.sent_count}")
+            print(f"done sending all {self.sent_count} messages.")
 
 
 def main():
@@ -196,14 +201,16 @@ def main():
     reader.start()
     writer.start()
     messages_to_send.close()
-    messages_to_send.join()
+    messages_to_send.join()  # wait until all messages have been sent.
 
-    received_messages.join()
     reader.stop()
 
-    while not received_messages.empty():
-        print("successfully received:", received_messages.get())
+    for i in range(3):
+        message = received_messages.get()
+        print("successfully received:", message)
+        received_messages.task_done()
 
+    received_messages.join()
     print("done.")
 
 
