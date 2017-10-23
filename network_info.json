@@ -1,0 +1,46 @@
+{
+    "PUBLIC_KEY": 123456789,
+    "PUBLIC_ROOT": 123,
+    "mother_node_info": {
+        "ip": "127.0.0.1",
+        "port": "12345"
+    },
+    "onion-nodes": [
+        {
+            "name": "Bob",
+            "secret_key": 11,
+            "node_info": {
+                "ip": "127.0.0.1",
+                "recv_port": "12346",
+                "send_port": "12347"
+            }
+        },
+        {
+            "name": "Alice",
+            "secret_key": 12,
+            "node_info": {
+                "ip": "127.0.0.1",
+                "recv_port": "12348",
+                "send_port": "12349"
+            }
+        },
+        {
+            "name": "David",
+            "secret_key": 13,
+            "node_info": {
+                "ip": "127.0.0.1",
+                "recv_port": "12350",
+                "send_port": "12351"
+            }
+        },
+        {
+            "name": "Robert",
+            "secret_key": 14,
+            "node_info": {
+                "ip": "127.0.0.1",
+                "recv_port": "12352",
+                "send_port": "12353"
+            }
+        }
+    ]
+}
