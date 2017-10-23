@@ -4,7 +4,7 @@ import sys
 import math
 
 
-class Encriptor:
+class Encryptor:
     """Class responsible for encrypting and decrypting messages"""
     def encrypt(message, key):
         """Encode a message using the given key"""
@@ -17,7 +17,7 @@ class Encriptor:
         raise NotImplementedError()
 
 
-class SimpleAdditionEncriptor(Encriptor):
+class SimpleAdditionEncriptor(Encryptor):
     """Simply adds and subtracts the key to the message"""
     def encrypt(message, key):
         int_value = _to_int(message)
