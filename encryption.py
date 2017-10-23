@@ -47,14 +47,6 @@ class SimpleAdditionEncriptor(Encryptor):
         return decripted_message
 
 
-def main():
-    text1 = "hello!!"
-    key = 123
-    encripted = SimpleAdditionEncriptor.encrypt(text1, key)
-    decripted = SimpleAdditionEncriptor.decrypt(encripted, key)
-    print(text1, encripted, decripted, sep='\n')
-
-
 def _to_string(data):
     if isinstance(data, str):
         return data
@@ -87,7 +79,3 @@ def _to_int(data):
         return data
     bytes_value = _to_bytes(data)
     return int.from_bytes(bytes_value, byteorder=sys.byteorder)
-
-
-if __name__ == '__main__':
-    main()
