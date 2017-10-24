@@ -7,43 +7,48 @@ from workers import *
 class ReaderWriterTestCase(unittest.TestCase):
     def test_read_equals_sent(self):
         """
-        Test that the messages read by the SocketReader
-        correspond to those that were written by the SocketWriter.
+        Test that the messages read by the SocketReader correspond to those
+        originally written by the SocketWriter.
         """
-        message_count = 5
+        message_count = 10
 
+        # Start a reader, and let him wait for a connection.
+        # Where the Reader puts incoming objects
+        received_objects = ClosableQueue()
+        reader = SocketReader(12345, received_objects)
+        reader.start()  # Start the reader. It will wait for messages.
 
+        # Create random messages to write to a socket
         original_messages = random_test_messages(message_count)
+        # The messages to be written are held in a ClosableQueue
         messages_to_send = ClosableQueue()
         for m in original_messages:
-            messages_to_send.put(m)
+            messages_to_send.put(m)  # Add each message to the queue.
 
+        # Create a SocketWriter, and give him the queue of messages to send.
         writer = SocketWriter(messages_to_send, socket.gethostname(), 12345)
+        writer.start()  # Start the writer
 
-        received_objects = Queue()
-        reader = SocketReader(12345, received_objects)
-
-        reader.start()
-        writer.start()
-
-        # close the writing queue, which will eventually stop the writer thread
+        # close the writing queue, which eventually stops the writer thread
         messages_to_send.close()
-        # wait until all messages have been sent.
-        messages_to_send.join()
+        # wait until all messages have been processed by the SocketWriter.
+        writer.join()
 
-        reader.stop()  # Stop the SocketReader
+        # If a message is done being sent by the socketWriter, than it is
+        # also done being received by the socketReader, since we use TCP.
+
+        # wait for the reader to have finished reading all messages.
+        reader.join()
 
         messages = []
-        for i in range(message_count):
-            json_object = received_objects.get()
+        for json_object in received_objects:
+            # convert the received json to an OnionMessage instance
             message = OnionMessage.from_json(json_object)
-            print("successfully received:", message)
+            # print("successfully received:", message)
             messages.append(message)
-            received_objects.task_done()
 
-        received_objects.join()  # wait for all objects to have been received.
-
-        self.assertListEqual(messages, original_messages)
+        # Assert that both lists should match perfectly.
+        self.assertCountEqual(messages, original_messages)
 
 
 def random_test_messages(count):

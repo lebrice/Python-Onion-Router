@@ -16,8 +16,15 @@ class ClosableQueue(Queue):
     """
     SENTINEL = object()
 
+    def __init__(self, maxsize=0):
+        super().__init__(maxsize)
+        self.closed = False
+
     def close(self):
-        self.put(self.SENTINEL)
+        if self.closed:
+            raise RuntimeError("Queue Already Closed.")
+        else:
+            self.put(self.SENTINEL)
 
     def __iter__(self):
         while True:
@@ -29,11 +36,17 @@ class ClosableQueue(Queue):
             finally:
                 self.task_done()
 
+    def __enter__(self):
+        pass
+
+    def __exit__(self, *exc):
+        self.close()
+
 
 class Worker(Thread):
     """
     Takes items from the :in_queue:, executes :func: on them,
-    then places the results on its :out_queue:. 
+    then places the results on its :out_queue:.
     Automatically stops whenever the :in_queue.close(): method is called.
 
     *(see ClosableQueue)*
@@ -49,6 +62,7 @@ class Worker(Thread):
         for item in self.in_queue:
             result = self.func(item)
             self.out_queue.put(result)
+        self.out_queue.close()
 
 
 class SplitterWorker(Thread):
@@ -110,21 +124,30 @@ class SocketReader(Thread):
                     empty = (buffer == b'')
                     string = str(buffer, encoding='UTF-8')
                     received_string += string
-                
+
                 # print("Received string:", received_string)
 
                 objects = split_into_objects(received_string)
                 count = 0
-                for obj in objects:
-                    self.out_queue.put(obj)
-                    count += 1
-                    # print("received_object: ", obj)
+
+                with self.out_queue:
+                    for obj in objects:
+                        self.out_queue.put(obj)
+                        count += 1
+                        # print("received_object: ", obj)
 
                 print(f"done receiving {count} objects for this connection.")
                 client_socket.close()
 
-    def stop(self):
+    def join(self, timeout=None):
+        self.out_queue.close()
         self.running = False
+        super().join()
+
+
+    # def stop(self):
+    #     self.running = False
+    #     # self.out_queue.close()
 
 
 def split_into_objects(string):
@@ -183,11 +206,11 @@ class SocketWriter(Thread):
                 bytes_to_send = string_version.encode()
                 total_length = len(bytes_to_send)
                 sent_so_far = 0
-                print("sending:", string_version)
+                # print("sending:", string_version)
                 while sent_so_far < total_length:
                     bytes_sent = out_socket.send(bytes_to_send[sent_so_far:])
                     sent_so_far += bytes_sent
                     # print("sent_so_far:", sent_so_far)
                 self.sent_count += 1
-                print(f"successfully sent message #{self.sent_count}")
+                # print(f"successfully sent message #{self.sent_count}")
             print(f"done sending all {self.sent_count} messages.")
