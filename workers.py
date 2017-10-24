@@ -82,7 +82,7 @@ class SocketReader(Thread):
     Takes the data from a Socket, and tries to parse it into sequences of
     messages.
 
-    Parses each message into :out_queue:
+    Parses each message into a JSON, then passes it to :out_queue:
     """
 
     def __init__(self, receiving_port, out_queue):
@@ -107,18 +107,18 @@ class SocketReader(Thread):
 
                 while self.running and not empty:
                     buffer = client_socket.recv(1024)
-                    empty = buffer is ""
+                    empty = (buffer == b'')
                     string = str(buffer, encoding='UTF-8')
                     received_string += string
                 
-                print("Received string:", received_string)
+                # print("Received string:", received_string)
 
                 objects = split_into_objects(received_string)
                 count = 0
                 for obj in objects:
                     self.out_queue.put(obj)
                     count += 1
-                    print("received_object: ", obj)
+                    # print("received_object: ", obj)
 
                 print(f"done receiving {count} objects for this connection.")
                 client_socket.close()
@@ -129,13 +129,13 @@ class SocketReader(Thread):
 
 def split_into_objects(string):
     """
-    attempts to split the given string into a series of JSON objects.
+    split the given string into a series of JSON objects.
     """
     import json
     string_so_far = ""
     open_bracket_count = 0
     closed_bracket_count = 0
-    for index, char in enumerate(string):
+    for char in string:
         string_so_far += char
         if char == '{':
             open_bracket_count += 1
@@ -144,12 +144,16 @@ def split_into_objects(string):
         if open_bracket_count == closed_bracket_count:
             try:
                 obj = json.loads(string_so_far)
+                yield obj  # Return the object, since the parsing worked.
+
+            except json.JSONDecodeError:
+                pass  # OK. that wasn't a valid json. Keep trying.
+
+            else:
+                # No exceptions ocurred. We reset the counter variables.
                 string_so_far = ""
                 open_bracket_count = 0
                 closed_bracket_count = 0
-                yield obj
-            except json.JSONDecodeError:
-                pass  # OK. that wasn't a valid json.
 
 
 class SocketWriter(Thread):
@@ -187,51 +191,3 @@ class SocketWriter(Thread):
                 self.sent_count += 1
                 print(f"successfully sent message #{self.sent_count}")
             print(f"done sending all {self.sent_count} messages.")
-
-
-def main():
-
-    messages_to_send = ClosableQueue()
-    for i in range(3):
-        messages_to_send.put(random_test_message(size=i*5))
-    writer = SocketWriter(messages_to_send, socket.gethostname(), 12345)
-
-    received_messages = Queue()
-    reader = SocketReader(12345, received_messages)
-    reader.start()
-    writer.start()
-    messages_to_send.close()
-    messages_to_send.join()  # wait until all messages have been sent.
-
-    reader.stop()
-
-    for i in range(3):
-        message = received_messages.get()
-        print("successfully received:", message)
-        received_messages.task_done()
-
-    received_messages.join()
-    print("done.")
-
-
-def random_test_message(size):
-    data = random_string(size)
-    bob = f"""
-        {{
-            "header": "ONION ROUTING G12",
-            "source": "127.0.0.1",
-            "destination": "",
-            "data": "{data}"
-        }}
-    """
-    return OnionMessage.from_json_string(bob)
-
-
-def random_string(length=1):
-    import random
-    import string
-    letters = [random.choice(string.ascii_letters) for i in range(length)]
-    return ''.join(letters)
-
-if __name__ == '__main__':
-    main()
