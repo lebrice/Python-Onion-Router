@@ -89,6 +89,8 @@ class SplitterWorker(Thread):
                 self.out_queue_a.put(item)
             else:
                 self.out_queue_b.put(item)
+        self.out_queue_a.close()
+        self.out_queue_b.close()
 
 
 class SocketReader(Thread):
