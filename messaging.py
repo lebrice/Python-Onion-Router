@@ -93,3 +93,11 @@ class OnionMessage(ToDictMixin, JsonConversionMixin):
 
     def to_bytes(self):
         return str(self).encode()
+
+    @classmethod
+    def from_json(cls, json_object):
+        string = json.dumps(json_object)
+        return cls.from_json_string(string)
+
+    def __eq__(self, value):
+        return str(self) == str(value)
