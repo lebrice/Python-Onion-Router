@@ -73,3 +73,61 @@ def random_string(length=1):
     import string
     letters = [random.choice(string.ascii_letters) for i in range(length)]
     return ''.join(letters)
+
+
+class WorkerTestCase(unittest.TestCase):
+    def setUp(self):
+        self.in_queue = ClosableQueue()
+        self.intermediate_queue = ClosableQueue()
+        self.out_queue = ClosableQueue()
+
+    def test_worker_executes_function(self):
+        double = lambda x: x**2
+        square = lambda x: x*2
+        worker1 = Worker(
+            square,
+            self.in_queue,
+            self.intermediate_queue
+        )
+        worker2 = Worker(
+            double,
+            self.intermediate_queue,
+            self.out_queue
+        )
+        worker1.start()
+        worker2.start()
+
+        for i in range(5):
+            self.in_queue.put(i*7)
+        self.in_queue.close()
+
+        for index, result in enumerate(self.out_queue):
+            self.assertEqual(double(square(index*7)), result)
+
+
+class WorkerTestCase(unittest.TestCase):
+    def setUp(self):
+        self.in_queue = ClosableQueue()
+        self.out_queue_a = ClosableQueue()
+        self.out_queue_b = ClosableQueue()
+
+    def test_splitter_worker_works(self):
+        even = lambda x: x % 2 == 0
+        worker = SplitterWorker(
+            even,
+            self.in_queue,
+            self.out_queue_a,
+            self.out_queue_b
+        )
+        worker.start()
+
+        numbers = [1, 34, 23, 84123, 123123, 64, 128]
+        for i in numbers:
+            self.in_queue.put(i)
+        self.in_queue.close()
+
+        for result in self.out_queue_a:
+            self.assertTrue(even(result))
+
+        for result in self.out_queue_b:
+            self.assertFalse(even(result))
