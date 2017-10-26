@@ -3,7 +3,6 @@
 Defines Workers that will be used to carry out various tasks.
 """
 from threading import Thread, Lock
-from queue import Queue
 import socket
 
 from messaging import OnionMessage
@@ -66,15 +65,15 @@ class SocketReader(Thread):
     Parses each message into a JSON, then passes it to :out_queue:
     """
 
-    def __init__(self, receiving_port, out_queue):
+    def __init__(self, receiving_port):
         super().__init__()
         self.receiving_port = receiving_port
-        self.out_queue = out_queue
-        self.running = False
+        self._out_queue = ClosableQueue()
+        self._running_flag = False
         self._running_lock = Lock()
 
     def run(self):
-        self.running = True
+        self._running_flag = True
         # Create the receiving socket
         with socket.socket() as recv_socket:
             host = socket.gethostname()
@@ -84,7 +83,7 @@ class SocketReader(Thread):
             while True:
                 # Safely check if we should stop running.
                 with self._running_lock:
-                    if not self.running:
+                    if not self._running_flag:
                         break
 
                 # print("starting")
@@ -103,20 +102,35 @@ class SocketReader(Thread):
                 objects = split_into_objects(received_string)
                 count = 0
 
-                with self.out_queue:
+                with self._out_queue:
                     for obj in objects:
-                        self.out_queue.put(obj)
+                        self._out_queue.put(obj)
                         count += 1
                         # print("received_object: ", obj)
 
                 print(f"done receiving {count} objects for this connection.")
                 client_socket.close()
 
-    def join(self, timeout=None):
-        self.out_queue.close()
+    def is_running(self):
         with self._running_lock:
-            self.running = False
+            return self._running_flag
+
+    @property
+    def out(self):
+        return self._out_queue
+
+    def stop(self, timeout=None):
+        self._out_queue.close()
+        with self._running_lock:
+            self._running_flag = False
         super().join()
+
+    def next(self):
+        """
+        Waits for the next item and return it. (This is a blocking call)
+        """
+        return self._out_queue.get()
+
 
 
 def split_into_objects(string):
