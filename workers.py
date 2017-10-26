@@ -123,7 +123,7 @@ class SocketReader(Thread):
         self._out_queue.close()
         with self._running_lock:
             self._running_flag = False
-        super().join()
+        self.join()
 
     def next(self):
         """
@@ -135,7 +135,7 @@ class SocketReader(Thread):
 
 def split_into_objects(string):
     """
-    split the given string into a series of JSON objects.
+    splits the given string into a series of JSON objects.
     """
     import json
     string_so_far = ""
@@ -174,7 +174,7 @@ class SocketWriter(Thread):
 
     def __init__(self, in_queue: ClosableQueue, ip_address, port):
         super().__init__()
-        self.in_queue = in_queue
+        self._in_queue = in_queue
         self.ip_address = ip_address
         self.port = port
 
@@ -184,7 +184,7 @@ class SocketWriter(Thread):
         with socket.socket() as out_socket:
             out_socket.connect((self.ip_address, self.port))
 
-            for message in self.in_queue:
+            for message in self._in_queue:
                 string_version = str(message)
                 bytes_to_send = string_version.encode()
                 total_length = len(bytes_to_send)
@@ -197,3 +197,7 @@ class SocketWriter(Thread):
                 self.sent_count += 1
                 # print(f"successfully sent message #{self.sent_count}")
             print(f"done sending all {self.sent_count} messages.")
+
+    @property
+    def input(self):
+        return self._in_queue
