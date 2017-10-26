@@ -11,7 +11,7 @@ from queues import *
 MOM_IP = socket.gethostname()
 MOM_RECEIVING_PORT = 12345
 
-class Node(threading.Thread, SimpleAdditionEncriptor):
+class OnionNode(threading.Thread, SimpleAdditionEncriptor):
     """A Node in the onion-routing network"""
     def __init__(self, name, receiving_port, private_key):
         self._name = name
@@ -90,3 +90,10 @@ class Node(threading.Thread, SimpleAdditionEncriptor):
             ("john", "127.0.0.1", "12348")
         ]
         return neighbours
+
+
+class DirectoryNode(Thread, SimpleAdditionEncriptor):
+    """ Central node, coordinates the onion network.
+    TODO: implement this.
+    """
+    pass
