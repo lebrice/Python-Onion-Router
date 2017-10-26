@@ -6,60 +6,67 @@ Defines the different tasks that will be executed by nodes.
 import socket
 import sys
 from threading import Thread, Lock
+from queues import ClosableQueue
 
 PUBLIC_MODULUS = 23
 PUBLIC_BASE = 5
 
 
-
-class DiffieHellmanReceiverTask():
+class DiffieHellmanReceiver(threading.Thread):
     """
-    Defines a task responsible for answering to key-exchange requests
+    Defines a worker responsible for answering key-exchange requests
     """
 
-    def __init__(self, receiving_port, private_key):
-        # TODO: Figure out a way of piping up the resulting shared secrets to another parent class (eventually Node)
+    def __init__(self, receiving_port, private_key, shared_secrets):
+        """
+        Creates a new Receiver.
 
+        :shared_secrets: : the dictionary of shared_secrets. The receiver will add secret keys to it.
+        """
         self._private_key = private_key
 
         self._host = socket.gethostname()
         self._port = receiving_port
+        self.shared_secrets = shared_secrets
 
-        # Create a new socket for receiving connections.
-        self._receiving_socket = socket.socket()
-        self._receiving_socket.bind((self._host, self._port))
+        self._running_flag = False
+        self._running_lock = Lock()
 
-        self.shared_secrets = {}
-        # We use a lock to prevent concurrent modification of the shared_secrets dictionary
-        self.lock = Lock()
-
-        self.running = False
-
-    def __call__(self):
+    def run(self):
         self.running = True
-        self._receiving_socket.listen()  # Listen, with up to 5 queued up connections
-        try:
-            while self.running:
-                client_socket, address = self._receiving_socket.accept()
-                task = KeyExchangeTask(self, client_socket, address, private_key)
-                client_specific_thread = Thread(None, task)
-                client_specific_thread.start()
-        finally:
-            self._receiving_socket.close()
+        with socket.socket() as receiving_socket:
+            receiving_socket.listen()  # Listen
 
-    def add_shared_secret(self, address, new_shared_secret):
-        with self.lock:
-            self.shared_secrets[address] = new_shared_secret
+            while self.running:
+                client_socket, address = receiving_socket.accept()
+                task = KeyExchangeTask(
+                    client_socket,
+                    address,
+                    self.private_key,
+                    self.shared_secrets
+                )
+                client_specific_thread = Thread(target=task)
+                client_specific_thread.start()
+
+    @property
+    def running(self) -> bool:
+        with self._running_lock:
+            return self._running_flag
+
+    @running.setter
+    def running(self, value: bool):
+        with self._running_lock:
+            self._running_flag = value
 
 
 class KeyExchangeTask(object):
-    def __init__(self, parent_task, exchange_socket, address, private_key):
-        # The parent task which we will give the key to.
-        self.parent_task = parent_task
+    def __init__(self, exchange_socket, address, private_key, shared_secrets):
 
         self._exchange_socket = exchange_socket
         self._address = address
         self._private_key = private_key
+
+        self.shared_secrets
 
         self._my_number = PUBLIC_BASE ** self._private_key % PUBLIC_MODULUS
 
@@ -114,11 +121,3 @@ class DiffieHellmanSender(object):
         our_shared_secret = (their_number ** private_key) % PUBLIC_MODULUS
         print("Our shared secret is", our_shared_secret)
         return their_number, our_shared_secret
-
-
-
-
-
-
-
-
