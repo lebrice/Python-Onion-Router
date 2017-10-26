@@ -2,46 +2,12 @@
 """
 Defines Workers that will be used to carry out various tasks.
 """
-from threading import Thread
+from threading import Thread, Lock
 from queue import Queue
 import socket
 
 from messaging import OnionMessage
-
-
-class ClosableQueue(Queue):
-    """
-    Queue subclass that can be closed. By closing the Queue,
-    the threads that are consuming its output are stopped.
-    """
-    SENTINEL = object()
-
-    def __init__(self, maxsize=0):
-        super().__init__(maxsize)
-        self.closed = False
-
-    def close(self):
-        if self.closed:
-            raise RuntimeError("Queue Already Closed.")
-        else:
-            self.put(self.SENTINEL)
-
-    def __iter__(self):
-        while True:
-            item = self.get()
-            try:
-                if item is self.SENTINEL:
-                    return  # Cause the thread to exit.
-                yield item
-            finally:
-                self.task_done()
-
-    def __enter__(self):
-        pass
-
-    def __exit__(self, *exc):
-        self.close()
-
+from queues import ClosableQueue
 
 class Worker(Thread):
     """
@@ -62,7 +28,6 @@ class Worker(Thread):
         for item in self.in_queue:
             result = self.func(item)
             self.out_queue.put(result)
-        self.out_queue.close()
 
 
 class SplitterWorker(Thread):
@@ -106,6 +71,7 @@ class SocketReader(Thread):
         self.receiving_port = receiving_port
         self.out_queue = out_queue
         self.running = False
+        self._running_lock = Lock()
 
     def run(self):
         self.running = True
@@ -115,13 +81,18 @@ class SocketReader(Thread):
             recv_socket.bind((host, self.receiving_port))
             recv_socket.listen(5)
 
-            while self.running:
+            while True:
+                # Safely check if we should stop running.
+                with self._running_lock:
+                    if not self.running:
+                        break
+
                 # print("starting")
                 client_socket, address = recv_socket.accept()
                 received_string = ""
                 empty = False
 
-                while self.running and not empty:
+                while not empty:
                     buffer = client_socket.recv(1024)
                     empty = (buffer == b'')
                     string = str(buffer, encoding='UTF-8')
@@ -143,13 +114,9 @@ class SocketReader(Thread):
 
     def join(self, timeout=None):
         self.out_queue.close()
-        self.running = False
+        with self._running_lock:
+            self.running = False
         super().join()
-
-
-    # def stop(self):
-    #     self.running = False
-    #     # self.out_queue.close()
 
 
 def split_into_objects(string):
