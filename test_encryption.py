@@ -1,7 +1,7 @@
 #!/usr/bin/python3
 
 import unittest
-from encryption import Encriptor, SimpleAdditionEncriptor
+from encryption import *
 
 
 class SimpleAdditionEncriptorTestCase(unittest.TestCase):
