@@ -2,11 +2,13 @@
 """
 Defines Workers that will be used to carry out various tasks.
 """
+from contextlib import contextmanager
 from threading import Thread, Lock
 import socket
 
 from messaging import OnionMessage
 from queues import ClosableQueue
+
 
 class Worker(Thread):
     """
@@ -132,7 +134,6 @@ class SocketReader(Thread):
         return self._out_queue.get()
 
 
-
 def split_into_objects(string):
     """
     splits the given string into a series of JSON objects.
@@ -164,25 +165,22 @@ def split_into_objects(string):
 
 class SocketWriter(Thread):
     """
-    Worker that takes messages from :in_queue: (which should be a
-    ClosableQueue) and writes each of them into a socket connected to the
-    given :ip_address: and :port:
+    Worker that takes messages and writes each of them into a socket connected
+    to the given :ip_address: and :port:
 
     Whenever the :in_queue:.close() function is called, the SocketWriter will
     eventually stop.
     """
 
-    def __init__(self, in_queue: ClosableQueue, ip_address, port):
+    def __init__(self, target_ip, target_port):
         super().__init__()
-        self._in_queue = in_queue
-        self.ip_address = ip_address
-        self.port = port
-
-        self.sent_count = 0
+        self._in_queue = ClosableQueue()
+        self._target_ip = target_ip
+        self._target_port = target_port
 
     def run(self):
         with socket.socket() as out_socket:
-            out_socket.connect((self.ip_address, self.port))
+            out_socket.connect((self._target_ip, self._target_port))
 
             for message in self._in_queue:
                 string_version = str(message)
@@ -190,6 +188,7 @@ class SocketWriter(Thread):
                 total_length = len(bytes_to_send)
                 sent_so_far = 0
                 # print("sending:", string_version)
+
                 while sent_so_far < total_length:
                     bytes_sent = out_socket.send(bytes_to_send[sent_so_far:])
                     sent_so_far += bytes_sent
@@ -198,6 +197,33 @@ class SocketWriter(Thread):
                 # print(f"successfully sent message #{self.sent_count}")
             print(f"done sending all {self.sent_count} messages.")
 
+    def write(self, message):
+        """ Puts the given message on the outgoing queue to be sent. """
+        self._in_queue.put(message)
+
+    def close(self):
+        self._in_queue.close()
+
     @property
     def input(self):
         return self._in_queue
+
+
+@contextmanager
+def read_socket(receiving_port) -> SocketReader:
+    reader = SocketReader(receiving_port)
+    try:
+        reader.start()
+        yield reader
+    finally:
+        reader.stop()
+
+
+@contextmanager
+def write_to_socket(target_ip, target_port) -> SocketWriter:
+    writer = SocketWriter(target_ip, target_port)
+    try:
+        writer.start()
+        yield writer
+    finally:
+        writer.close()
