@@ -2,62 +2,82 @@
 
 import sys
 import socket
-import collections
+import threading
 
 from encryption import *
+from workers import *
+from queues import *
 
 
-class Node(Encriptor):
+class Node(threading.Thread, SimpleAdditionEncriptor):
     """A Node in the onion-routing network"""
-    def __init__(self, name, ip_address, receiving_port):
+    def __init__(self, name, receiving_port, private_key):
         self._name = name
-        self._ip_address = ip_address
+        self._ip_address = socket.gethostname()
         self._receiving_port = receiving_port
-        self._started = False
+        self._private_key = private_key
 
-    @property
-    def ip_address(self):
-        return self._ip_address
+        self.neighbours = []
+        self.shared_keys = []
 
-    @ip_address.setter
-    def ip_address(self, ip_address):
-        if hasattr(self, "_ip_address") and self._started:
-            raise AttributeError("IP cannot be changed after node is started.")
-        self._ip_address = ip_address
+        self._running_lock = Lock()
+        self._running_flag = False
 
-    def start(self):
+        self._socket_reader: SocketReader = None
+
+        super().__init__()
+
+    def run(self):
         """
         Starts the node, initializing all the required connections
         with the onion routing network
         """
-        if(self._started):
-            return  # Node has already been started.
-        self._receiving_socket = socket.socket()
-        self._receiving_socket.bind((self._ip_address, self._receiving_port))
-        self._receiving_socket.listen(5)
-        self._started = True
+        self._running_flag = True
 
+        self.contact_directory_node()
+        neighbours = self.get_neighbouring_nodes_addresses()
+
+        for neighbour in neighbours:
+            shared_key = self.perform_key_exchange_with(neighbour)
+            self.shared_keys.append()
+
+        self._socket_reader = SocketReader(self._receiving_port)
+
+        while self.is_running():
+            message = self._socket_reader.next()  # Wait for the next message to arrive.
+            self.process_message(message)
+
+    def is_running(self):
+        """ returns if the thread is currently running """
+        with self._running_lock:
+            return self._running_flag
+    
     def stop(self):
+        """ tells the node to shutdown. """
+        with self._running_lock:
+            self._running_flag = False
+        self._socket_reader.stop()
+
+    def process_message(self):
+        # if OnionMessage.is_meant_for_me(self, message):
+        #     # Do something
+        # else:
+        #     # Forward the message along.
+        pass
+        
+    def contact_directory_node(self):
         """
-        Stops the node, closing all communications with the onion routing
-        network.
+        TODO: Tell the directory node that we exist, exchange keys with it, then get some information from it.
         """
-        if(not self._started):
-            return  # Node has already been stopped or hasn't started yet.
-        self._receiving_socket.close()
-        self._started = False
-
-    def say_hello(self):
-        message = f"hey! my name is {self._name}"
-        print(message)
-        print(self.encrypt(message, 123))
-
-
-def main():
-    bob = Node("Bob", "127.0.0.1", 12345)
-    bob.say_hello()
-    bob.start()
-    bob.stop()
-
-if __name__ == '__main__':
-    main()
+        call_mom_socket = socket.socket()
+        call_mom_socket.connect((MOM_IP, MOM_RECEIVING_PORT))
+        
+    def get_neighbouring_nodes_addresses(self):
+        #TODO: Get a list of all neighbouring nodes.
+        neighbours = [
+            ("mom", "127.0.0.1", "12345"),
+            ("bob", "127.0.0.1", "12346"),
+            ("alice", "127.0.0.1", "12347"),
+            ("john", "127.0.0.1", "12348")
+        ]
+        return neighbours
