@@ -8,6 +8,8 @@ from encryption import *
 from workers import *
 from queues import *
 
+MOM_IP = socket.gethostname()
+MOM_RECEIVING_PORT = 12345
 
 class Node(threading.Thread, SimpleAdditionEncriptor):
     """A Node in the onion-routing network"""
@@ -39,7 +41,7 @@ class Node(threading.Thread, SimpleAdditionEncriptor):
 
         for neighbour in neighbours:
             shared_key = self.perform_key_exchange_with(neighbour)
-            self.shared_keys.append()
+            self.shared_keys.append(shared_key)
 
         self._socket_reader = SocketReader(self._receiving_port)
 
@@ -48,7 +50,7 @@ class Node(threading.Thread, SimpleAdditionEncriptor):
             self.process_message(message)
 
     def is_running(self):
-        """ returns if the thread is currently running """
+        """ returns if the node is currently running """
         with self._running_lock:
             return self._running_flag
     
@@ -58,19 +60,26 @@ class Node(threading.Thread, SimpleAdditionEncriptor):
             self._running_flag = False
         self._socket_reader.stop()
 
-    def process_message(self):
+    def process_message(self, message):
+        """ 
+        TODO: main application logic.
+        - Figure out what to do with a message: is it supposed to be forwarded to another node ?
+        """
         # if OnionMessage.is_meant_for_me(self, message):
         #     # Do something
         # else:
         #     # Forward the message along.
         pass
-        
+
     def contact_directory_node(self):
         """
         TODO: Tell the directory node that we exist, exchange keys with it, then get some information from it.
         """
-        call_mom_socket = socket.socket()
-        call_mom_socket.connect((MOM_IP, MOM_RECEIVING_PORT))
+        with socket.socket() as mom_socket:
+            mom_socket.connect((MOM_IP, MOM_RECEIVING_PORT))
+            # TODO:
+            mom_socket.send("Hey! I'm alive.")
+            
         
     def get_neighbouring_nodes_addresses(self):
         #TODO: Get a list of all neighbouring nodes.
