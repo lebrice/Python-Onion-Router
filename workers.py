@@ -4,7 +4,7 @@ Defines Workers that will be used to carry out various tasks.
 """
 from contextlib import contextmanager
 from threading import Thread, Lock
-import socket
+import exchange_socket
 
 from messaging import OnionMessage
 from queues import ClosableQueue
@@ -77,8 +77,8 @@ class SocketReader(Thread):
     def run(self):
         self._running_flag = True
         # Create the receiving socket
-        with socket.socket() as recv_socket:
-            host = socket.gethostname()
+        with exchange_socket.socket() as recv_socket:
+            host = exchange_socket.gethostname()
             recv_socket.bind((host, self.receiving_port))
             recv_socket.listen(5)
 
@@ -101,6 +101,9 @@ class SocketReader(Thread):
 
                 # print("Received string:", received_string)
 
+                # TODO: Might want to take this out, and simply return the
+                # bytes that we receive, one at a time, since not everyone
+                # might want to use this "split into objects" functionality.
                 objects = split_into_objects(received_string)
                 count = 0
 
@@ -179,7 +182,7 @@ class SocketWriter(Thread):
         self._target_port = target_port
 
     def run(self):
-        with socket.socket() as out_socket:
+        with exchange_socket.socket() as out_socket:
             out_socket.connect((self._target_ip, self._target_port))
 
             for message in self._in_queue:
