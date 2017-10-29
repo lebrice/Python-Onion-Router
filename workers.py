@@ -4,7 +4,7 @@ Defines Workers that will be used to carry out various tasks.
 """
 from contextlib import contextmanager
 from threading import Thread, Lock
-import exchange_socket
+import socket
 
 from messaging import OnionMessage
 from queues import ClosableQueue
@@ -77,8 +77,8 @@ class SocketReader(Thread):
     def run(self):
         self._running_flag = True
         # Create the receiving socket
-        with exchange_socket.socket() as recv_socket:
-            host = exchange_socket.gethostname()
+        with socket.socket() as recv_socket:
+            host = socket.gethostname()
             recv_socket.bind((host, self.receiving_port))
             recv_socket.listen(5)
 
@@ -182,7 +182,7 @@ class SocketWriter(Thread):
         self._target_port = target_port
 
     def run(self):
-        with exchange_socket.socket() as out_socket:
+        with socket.socket() as out_socket:
             out_socket.connect((self._target_ip, self._target_port))
 
             for message in self._in_queue:
