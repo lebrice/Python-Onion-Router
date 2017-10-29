@@ -3,6 +3,7 @@
     Deals with the header format and parsing + message encryption.
 
     https://svn.torproject.org/svn/projects/design-paper/tor-design.html
+    http://doctrina.org/How-RSA-Works-With-Examples.html
 """
 
 import random as rd
@@ -181,14 +182,14 @@ def RSA():
 
     return mod, public_exp, private_exp
 
-def encrypt_AES(key, message):
+"""def encrypt_AES(key, message):
     obj = AES.new(key, AES.MODE_CBC, 'This is an IV456')
     return obj.encrypt(message)
 
 
 def decrypt_AES(key, ciphertext):
     obj = AES.new(key, AES.MODE_CBC, 'This is an IV456')
-    return obj.decrypt(ciphertext)
+    return obj.decrypt(ciphertext)"""
 
 
 def create_header():
@@ -235,10 +236,10 @@ def main():
 
     message = "RSA in the house"
     print("Message: ", message)
-    cipher = encrypt_RSA(convertTextToNumber(message), e, n)
-    print("Cipher: ", cipher)
-    decrypted = decrypt_RSA(cipher, d, n)
-    originalMessage = convertNumberToText(decrypted)
+    cipherRSA = encrypt_RSA(convertTextToNumber(message), e, n)
+    print("Cipher RSA: ", cipherRSA)
+    decryptedRSA = decrypt_RSA(cipherRSA, d, n)
+    originalMessage = convertNumberToText(decryptedRSA)
     print("Original: ", originalMessage)
 
 
