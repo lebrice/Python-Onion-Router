@@ -18,18 +18,18 @@ class Encryptor:
         # TODO: encrypt the message using the key.S
         raise NotImplementedError()
 
-    @staticmethod
-    def successive_encrypt(message, *keys):
+    @classmethod
+    def successive_encrypt(cls, message, *keys):
         result = message
         for key in keys:
-            result = Encryptor.encrypt(result, key)
+            result = cls.encrypt(result, key)
         return result
 
-    @staticmethod
-    def successive_decrypt(message, *keys):
+    @classmethod
+    def successive_decrypt(cls, message, *keys):
         result = message
         for key in keys:
-            result = Encryptor.decrypt(result, key)
+            result = cls.decrypt(result, key)
         return result
 
 
