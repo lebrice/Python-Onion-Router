@@ -8,20 +8,38 @@ from node import OnionNode, DirectoryNode
 from onion_socket import OnionSocket
 from errors import *
 from workers import SocketReader
+from network_creator import *
 
 
 class OnionSocketTestCase(unittest.TestCase):
     def setUp(self):
-        self.directory_node = DirectoryNode()
-        self.directory_node.start()
+        self.setup_network()
+        self.start_all()
 
-        self.dummy_reader = SocketReader(12351)
-        self.dummy_reader.start()
+        self.website = SocketReader(12351)
+        self.website.start()
 
     def tearDown(self):
-        self.directory_node.stop()
-        self.dummy_reader.stop()
+        self.stop_all()
+        self.website.stop()
 
+    def setup_network(self):
+        self.directory_node, self.onion_nodes = generate_nodes(
+            onion_node_count=3,
+            starting_port=12345
+        )
+
+    def start_all(self):
+        self.directory_node.start()
+        for node in self.onion_nodes:
+            node.start()
+
+    def stop_all(self):
+        for node in self.onion_nodes:
+            node.stop()
+        self.directory_node.stop()
+
+    @unittest.skip
     def test_socket_send_without_connect_raises_error(self):
         socket = OnionSocket.socket()
         with self.assertRaises(OnionSocketError):
