@@ -3,7 +3,9 @@
 import sys
 import socket
 import threading
+import time
 
+from queue import Empty
 from encryption import *
 from workers import *
 from queues import *
@@ -27,15 +29,16 @@ class OnionNode(threading.Thread, SimpleAdditionEncriptor):
 
         self._running_lock = Lock()
         self._running_flag = False
+        self.initialized = False
 
     def run(self):
         """
         Starts the node, initializing all the required connections
         with the onion routing network
         """
-        self._running_flag = True
+        self.running = True
         with read_socket(self._receiving_port) as socket_reader:
-            while self.is_running():
+            while self.running:
                 # Wait for the next message to arrive.
                 message = socket_reader.next()
                 self.process_message(message)
@@ -47,25 +50,36 @@ class OnionNode(threading.Thread, SimpleAdditionEncriptor):
         TODO: Implement this for real. This is just pseudocode
         """
         self.contact_directory_node()
-        neighbours = self.get_neighbouring_nodes_addresses()
+        self.neighbours = self.get_neighbouring_nodes_addresses()
 
-        for neighbour in neighbours:
+        for neighbour in self.neighbours:
             shared_key = self.perform_key_exchange_with(neighbour)
             self.shared_keys.append(shared_key)
 
-    def is_running(self):
+        self.initialized = True
+
+    @property
+    def running(self):
         """ returns if the node is currently running """
         with self._running_lock:
             return self._running_flag
 
+    @running.setter
+    def running(self, value):
+        with self._running_lock:
+            self._running_flag = value
+
+    def start(self):
+        self._initialize()
+        super().start()
+
     def stop(self):
         """ tells the node to shutdown. """
-        with self._running_lock:
-            self._running_flag = False
+        self.running = False
         # self.join()
 
     def process_message(self, message):
-        """ 
+        """
         TODO: main application logic.
         - Figure out what to do with a message: is it supposed to be forwarded
         to another node ?
@@ -86,21 +100,27 @@ class OnionNode(threading.Thread, SimpleAdditionEncriptor):
         """TODO: Tell the directory node that we exist, exchange keys with it,
         then get some information from it.
         """
-        with write_to_socket(MOM_IP, MOM_RECEIVING_PORT) as writer:
-            # TODO:
-            message = "Hey! I'm alive!"
-            print("OnionNode is writing a message:", message)
-            writer.write(message)
 
     def get_neighbouring_nodes_addresses(self):
         # TODO: Get a list of all neighbouring nodes.
-        # neighbours = [
-        #     ("mom", "127.0.0.1", "12345"),
-        #     ("bob", "127.0.0.1", "12346"),
-        #     ("alice", "127.0.0.1", "12347"),
-        #     ("john", "127.0.0.1", "12348")
-        # ]
-        return []
+        with socket.socket() as _socket:
+            _socket.connect((MOM_IP, MOM_RECEIVING_PORT))
+
+            message = OnionMessage(
+                header="GET_NEIGHBOURS",
+                destination=MOM_IP
+            )
+
+            print("OnionNode is writing a message:", message)
+            _socket.sendall(message.to_bytes())
+            response_bytes = _socket.recv(1024)
+
+            response_str = str(response_bytes, encoding="utf-8")
+            response = OnionMessage.from_json_string(response_str)
+
+            neighbours = response.data
+            print(f"OnionNode received list of neighbours back: {neighbours}")
+            return neighbours
 
 
 class DirectoryNode(Thread, SimpleAdditionEncriptor):
@@ -109,23 +129,65 @@ class DirectoryNode(Thread, SimpleAdditionEncriptor):
     """
 
     def __init__(self, receiving_port=12345):
-        self._receiving_port = 12345
-        self._running = False
         super().__init__()
+        self._host = socket.gethostname()
+        self._receiving_port = receiving_port
+        self._running_flag = False
+        self._running_lock = Lock()
+
+        self.network_onion_nodes = []
 
     def run(self):
-        self._running = True
-        with read_socket(MOM_RECEIVING_PORT) as socket_reader:
-            while self._running:
+        self.running = True
+        with socket.socket() as recv_socket:
+            recv_socket.bind((self._host, self._receiving_port))
+            recv_socket.listen(5)
+            while self.running:
+                # TODO: Implement this for real. 
                 print("Directory Node is running.")
-                message = socket_reader.out.get()
-                print("Directory node received message:", message)
-                # # TODO: Implement something like this.
-                # if(is_key_exchange(message)):
-                #     self.key_exchange_receiver.handle(client_socket, address, message)
-                # client_socket.send("Hey,thanks for connecting.".encode())
+                client_socket, client_address = recv_socket.accept()
+                message_bytes = client_socket.recv(1024)
+                message_str = str(message_bytes, encoding='utf-8')
+                print("Directory node received message:", message_str)
+
+                if not OnionMessage.is_valid_string(message_str):
+                    client_socket.sendall("INVALID_STR".encode())
+                    client_socket.close()
+                    continue
+
+                message = OnionMessage.from_json_string(message_str)
+
+                if self.network_onion_nodes.count(client_address) == 0:
+                    self.network_onion_nodes.append(client_address)
+
+                if(message.header == "GET_NEIGHBOURS"):
+                    neighbours = self.network_onion_nodes.copy()
+                    neighbours.remove(client_address)
+
+                    response_message = OnionMessage(
+                        source=(self._host, self._receiving_port),
+                        header="WELCOME_TO_NETWORK",
+                        destination=client_address,
+                        data=neighbours
+                    )
+                    client_socket.sendall(response_message.to_bytes())
+
+                client_socket.close()
+
+
+
+    @property
+    def running(self):
+        """ returns if the node is currently running """
+        with self._running_lock:
+            return self._running_flag
+
+    @running.setter
+    def running(self, value):
+        with self._running_lock:
+            self._running_flag = value
 
     def stop(self):
         """ tells the node to shutdown. """
-        self._running = False
-        self.join()
+        self.running = False
+        # self.join()
