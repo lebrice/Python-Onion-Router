@@ -190,15 +190,10 @@ class SocketWriter(Thread):
                 bytes_to_send = string_version.encode()
                 total_length = len(bytes_to_send)
                 sent_so_far = 0
-                # print("sending:", string_version)
 
                 while sent_so_far < total_length:
                     bytes_sent = out_socket.send(bytes_to_send[sent_so_far:])
                     sent_so_far += bytes_sent
-                    # print("sent_so_far:", sent_so_far)
-
-                # print(f"successfully sent message #{self.sent_count}")
-            print(f"done sending all {self.sent_count} messages.")
 
     def write(self, message):
         """ Puts the given message on the outgoing queue to be sent. """
