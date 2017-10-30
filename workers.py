@@ -130,11 +130,11 @@ class SocketReader(Thread):
             self._running_flag = False
         self.join()
 
-    def next(self):
+    def next(self, block=True, timeout=None):
         """
         Waits for the next item and return it. (This is a blocking call)
         """
-        return self._out_queue.get()
+        return self._out_queue.get(block, timeout)
 
 
 def split_into_objects(string):
@@ -196,7 +196,7 @@ class SocketWriter(Thread):
                     bytes_sent = out_socket.send(bytes_to_send[sent_so_far:])
                     sent_so_far += bytes_sent
                     # print("sent_so_far:", sent_so_far)
-                self.sent_count += 1
+
                 # print(f"successfully sent message #{self.sent_count}")
             print(f"done sending all {self.sent_count} messages.")
 
