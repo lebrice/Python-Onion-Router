@@ -70,13 +70,11 @@ class OnionMessage(ToDictMixin, JsonConversionMixin):
     """
     Represents a message in the onion routing network.
     """
-
-    HOME = "127.0.0.1"
     HEADER = "ONION ROUTING G12"
 
     def __init__(self,
-                 source=HOME,
-                 destination="",
+                 source=None,
+                 destination=None,
                  data=None,
                  header=HEADER,
                  ):
