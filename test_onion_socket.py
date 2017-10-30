@@ -12,31 +12,18 @@ from network_creator import *
 
 
 class OnionSocketTestCase(unittest.TestCase):
-    def setUp(self):
-        self.setup_network()
-        self.start_all()
 
-        self.website = SocketReader(12351)
-        self.website.start()
+    def setUp(self):
+        self.private_key = 1443
+        self.directory_node = DirectoryNode()
+        self.directory_node.network_onion_nodes = [
+            ("127.0.0.1", 12347),
+            ("127.0.0.1", 12348),
+            ("127.0.0.1", 12349)
+        ]
+        self.directory_node.start()
 
     def tearDown(self):
-        self.stop_all()
-        self.website.stop()
-
-    def setup_network(self):
-        self.directory_node, self.onion_nodes = generate_nodes(
-            onion_node_count=3,
-            starting_port=12345
-        )
-
-    def start_all(self):
-        self.directory_node.start()
-        for node in self.onion_nodes:
-            node.start()
-
-    def stop_all(self):
-        for node in self.onion_nodes:
-            node.stop()
         self.directory_node.stop()
 
     @unittest.skip
@@ -46,14 +33,14 @@ class OnionSocketTestCase(unittest.TestCase):
             socket.send("something")
 
     def test_message_creation(self):
-        socket = OnionSocket.socket()
-        socket.connect(("127.0.0.1", 12351))
+        node = self.get_dummy_onion_node()
+        socket = OnionSocket(onion_node=node)
+        socket.connect(("127.0.0.1", 12350))
 
-    def get_dummy_neighbours(self):
-        neighbours = [
-            ("mom", "127.0.0.1", "12345"),
-            ("bob", "127.0.0.1", "12346"),
-            ("alice", "127.0.0.1", "12347"),
-            ("john", "127.0.0.1", "12348")
-        ]
-        return neighbours
+        ready_for_sending = socket._create_message("HTTP GET: www.youtube.com")
+        print(ready_for_sending)
+
+    def get_dummy_onion_node(self):
+        """ Returns a dummy OnionNode for testing purposes. """
+        node = OnionNode("my_node", 12346, self.private_key)
+        return node
