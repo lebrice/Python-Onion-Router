@@ -23,11 +23,3 @@ def generate_nodes(onion_node_count=10, starting_port=12345):
         onion_nodes.append(node)
 
     return directory_node, onion_nodes
-
-
-def main():
-    create_network()
-
-
-if __name__ == '__main__':
-    main()
