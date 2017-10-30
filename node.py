@@ -25,7 +25,8 @@ class OnionNode(threading.Thread, SimpleAdditionEncriptor):
         self._private_key = private_key
 
         self.neighbours = []
-        self.shared_keys = []
+        self.public_keys = {}
+        self.shared_secrets = {}
 
         self._running_lock = Lock()
         self._running_flag = False
@@ -53,8 +54,10 @@ class OnionNode(threading.Thread, SimpleAdditionEncriptor):
         self.neighbours = self.get_neighbouring_nodes_addresses()
 
         for neighbour in self.neighbours:
-            shared_key = self.perform_key_exchange_with(neighbour)
-            self.shared_keys.append(shared_key)
+            neighbour_ip, neighbour_port = neighbour
+            public_key, shared_key = self.perform_key_exchange_with(neighbour)
+            self.public_keys[(neighbour_ip, neighbour_port)] = public_key
+            self.shared_secrets[(neighbour_ip, neighbour_port)] = shared_key
 
         self.initialized = True
 
@@ -94,6 +97,7 @@ class OnionNode(threading.Thread, SimpleAdditionEncriptor):
         """Perform a DH key-exchange with the given neighbour and return the shared key
         TODO: Implement this.
         """
+        return (31, 123) # Some random values, for the moment.
         pass
 
     def contact_directory_node(self):
@@ -143,7 +147,7 @@ class DirectoryNode(Thread, SimpleAdditionEncriptor):
             recv_socket.bind((self._host, self._receiving_port))
             recv_socket.listen(5)
             while self.running:
-                # TODO: Implement this for real. 
+                # TODO: Implement this for real.
                 print("Directory Node is running.")
                 client_socket, client_address = recv_socket.accept()
                 message_bytes = client_socket.recv(1024)
