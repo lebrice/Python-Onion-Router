@@ -6,19 +6,36 @@ import math
 
 class Encryptor:
     """Class responsible for encrypting and decrypting messages"""
+    @staticmethod
     def encrypt(message, key):
         """Encode a message using the given key"""
         # TODO: encrypt the message using the key.
         raise NotImplementedError()
 
+    @staticmethod
     def decrypt(message, key):
         """Decode a message using the given key"""
         # TODO: encrypt the message using the key.S
         raise NotImplementedError()
 
+    @staticmethod
+    def successive_encrypt(message, *keys):
+        result = message
+        for key in keys:
+            result = Encryptor.encrypt(result, key)
+        return result
+
+    @staticmethod
+    def successive_decrypt(message, *keys):
+        result = message
+        for key in keys:
+            result = Encryptor.decrypt(result, key)
+        return result
+
 
 class SimpleAdditionEncriptor(Encryptor):
     """Simply adds and subtracts the key to the message"""
+    @staticmethod
     def encrypt(message, key):
         int_value = _to_int(message)
         int_key = _to_int(key)
