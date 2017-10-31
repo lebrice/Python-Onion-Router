@@ -11,12 +11,13 @@ from errors import *
 from workers import SocketReader
 from network_creator import *
 
+PRIVATE_KEY = 1443
+
 
 class OnionSocketTestCase(unittest.TestCase):
 
     def setUp(self):
         """ Runs before every test """
-        self.private_key = 1443
         self.directory_node = DirectoryNode()
         # TODO: actually create a set of onion nodes.
         self.directory_node.network_onion_nodes = [
@@ -38,19 +39,16 @@ class OnionSocketTestCase(unittest.TestCase):
                 socket.send("something without having called socket.connect()")
 
     def test_connect_works(self):
-        socket = OnionSocket(onion_node=self.get_dummy_onion_node())
-
         try:
             dummyListener = SocketReader(12350)
             dummyListener.start()
-
-            socket.connect(("127.0.0.1", 12350))
+            with OnionSocket.socket(self.get_dummy_onion_node()) as socket:
+                socket.connect(("127.0.0.1", 12350))
         except OnionError:
-            self.fail("There was an error while connecting to an existing host.")
+            self.fail("There was an error while connecting to an the host.")
         finally:
             dummyListener.stop()
-            socket.close()
 
     def get_dummy_onion_node(self):
         """ Returns a dummy OnionNode for testing purposes. """
-        return OnionNode("my_node", 12346, self.private_key)
+        return OnionNode("my_node", 12346, PRIVATE_KEY)

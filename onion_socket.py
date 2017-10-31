@@ -12,11 +12,14 @@ from errors import OnionSocketError, OnionNetworkError
 from encryption import *
 from messaging import *
 
+# TODO: create a new private key for each OnionSocket
+DEFAULT_PRIVATE_KEY = 164
+
 
 class OnionSocket():
     def __init__(self, onion_node=None):
         # TODO: change this private key for each node.
-        self.my_private_key = 164  # Some random value
+        self.my_private_key = DEFAULT_PRIVATE_KEY  # Some random value
         self.target_ip = None
         self.target_port = None
         if onion_node is None:
@@ -29,16 +32,20 @@ class OnionSocket():
         while(self.node.initialized is not True):
             time.sleep(0.1)  # Thread.yield() equivalent, kindof
 
-    @contextmanager
     @staticmethod
+    @contextmanager
     def socket(onion_node=None):
         if onion_node is None:
-            onion_node = OnionNode("my_node", 12350, self.my_private_key)
+            onion_node = OnionNode("my_node", 12350, DEFAULT_PRIVATE_KEY)
         onion_socket = OnionSocket(onion_node)
         try:
             yield onion_socket
         finally:
             onion_socket.close()
+
+    @property
+    def connected(self):
+        return (self.target_ip is not None) and (self.target_port is not None)
 
     def connect(self, target_ip_info):
         """ Connects to the given remote host, through the onion network.
@@ -50,7 +57,7 @@ class OnionSocket():
     def send(self, data: bytes):
         """ Sends the given data to the remote host through the OnionSocket.
         """
-        if not self.node.running:
+        if not self.connected:
             raise OnionSocketError("Onion network has not been initialized.")
         message = self._create_message(data)
         self.node.send_message(message)
