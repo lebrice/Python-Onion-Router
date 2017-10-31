@@ -1,6 +1,7 @@
 #!/usr/bin/python3
 """ Module that defines the OnionSocket, used by the user to communicate using
 the onion routing network """
+from contextlib import contextmanager
 import random
 import socket
 import time
@@ -23,25 +24,28 @@ class OnionSocket():
         else:
             self.node = onion_node
 
-    @staticmethod
-    def socket():
-        """ Creates a new OnionSocket.
+        # TODO: Need to initialize the node properly.
+        self.node.start()
+        while(self.node.initialized is not True):
+            time.sleep(0.1)  # Thread.yield() equivalent, kindof
 
-        (Made to imitate *socket.socket()* method.)
-        """
-        return OnionSocket()
+    @contextmanager
+    @staticmethod
+    def socket(onion_node=None):
+        if onion_node is None:
+            onion_node = OnionNode("my_node", 12350, self.my_private_key)
+        onion_socket = OnionSocket(onion_node)
+        try:
+            yield onion_socket
+        finally:
+            onion_socket.close()
 
     def connect(self, target_ip_info):
         """ Connects to the given remote host, through the onion network.
         """
         # NOTE: This might be a good place to build/initialize the circuit?
         self.target_ip, self.target_port = target_ip_info
-
-        # TODO: Need to initialize the node properly.
-        self.node.start()
-        while(self.node.initialized is not True):
-            time.sleep(0.1)  # Thread.yield() equivalent, kindof.
-        print("All is good.")
+        # TODO: Might create circuit now ?
 
     def send(self, data: bytes):
         """ Sends the given data to the remote host through the OnionSocket.
@@ -120,3 +124,5 @@ class OnionSocket():
         print("\nmessage2", message2)
         print("\nmessage1", message1)
         return message1
+
+

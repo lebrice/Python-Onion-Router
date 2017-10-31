@@ -5,6 +5,7 @@ import unittest
 
 
 from node import OnionNode, DirectoryNode
+import onion_socket
 from onion_socket import OnionSocket
 from errors import *
 from workers import SocketReader
@@ -14,8 +15,10 @@ from network_creator import *
 class OnionSocketTestCase(unittest.TestCase):
 
     def setUp(self):
+        """ Runs before every test """
         self.private_key = 1443
         self.directory_node = DirectoryNode()
+        # TODO: actually create a set of onion nodes.
         self.directory_node.network_onion_nodes = [
             ("127.0.0.1", 12347),
             ("127.0.0.1", 12348),
@@ -24,23 +27,30 @@ class OnionSocketTestCase(unittest.TestCase):
         self.directory_node.start()
 
     def tearDown(self):
+        """ Runs after every test """
         self.directory_node.stop()
 
-    @unittest.skip
     def test_socket_send_without_connect_raises_error(self):
-        socket = OnionSocket.socket()
+        """ Test that using socket.send() before calling socket.connect()
+        raises an error."""
         with self.assertRaises(OnionSocketError):
-            socket.send("something")
+            with OnionSocket.socket() as socket:
+                socket.send("something without having called socket.connect()")
 
-    def test_message_creation(self):
-        node = self.get_dummy_onion_node()
-        socket = OnionSocket(onion_node=node)
-        socket.connect(("127.0.0.1", 12350))
+    def test_connect_works(self):
+        socket = OnionSocket(onion_node=self.get_dummy_onion_node())
 
-        ready_for_sending = socket._create_message("HTTP GET: www.youtube.com")
-        print(ready_for_sending)
+        try:
+            dummyListener = SocketReader(12350)
+            dummyListener.start()
+
+            socket.connect(("127.0.0.1", 12350))
+        except OnionError:
+            self.fail("There was an error while connecting to an existing host.")
+        finally:
+            dummyListener.stop()
+            socket.close()
 
     def get_dummy_onion_node(self):
         """ Returns a dummy OnionNode for testing purposes. """
-        node = OnionNode("my_node", 12346, self.private_key)
-        return node
+        return OnionNode("my_node", 12346, self.private_key)
