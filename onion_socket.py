@@ -49,12 +49,17 @@ class OnionSocket():
         if not self.node.running:
             raise OnionSocketError("Onion network has not been initialized.")
         message = self._create_message(data)
-        raise NotImplementedError()
+        self.node.send_message(message)
 
     def recv(self, buffer_size):
         """ Receives the given number of bytes from the Onion socket.
         """
         raise NotImplementedError()
+
+    def close(self):
+        """ closes the onionSocket. """
+        # TODO
+        self.node.stop()
 
     def _select_three_random_neighbours(self):
         if len(self.node.neighbours) < 3:
@@ -114,4 +119,4 @@ class OnionSocket():
         print("\nmessage3", message3)
         print("\nmessage2", message2)
         print("\nmessage1", message1)
-        self.node.send_message(message1)
+        return message1
