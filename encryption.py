@@ -35,7 +35,7 @@ class Encryptor:
 
 class SimpleAdditionEncriptor(Encryptor):
     """Simply adds and subtracts the key to the message"""
-    @staticmethod
+
     def encrypt(message, key):
         int_value = _to_int(message)
         int_key = _to_int(key)
@@ -62,6 +62,15 @@ class SimpleAdditionEncriptor(Encryptor):
         decripted_bytes = _to_bytes(decripted_int)
         decripted_message = _to_string(decripted_bytes)
         return decripted_message
+
+
+class DoNothingEncryptor(Encryptor):
+    """ An encryptor that does nothing. Used in testing."""
+    def encrypt(message: bytes, key):
+        return message
+
+    def decrypt(message: bytes, key):
+        return message
 
 
 def _to_string(data):
