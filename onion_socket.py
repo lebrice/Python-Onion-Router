@@ -110,8 +110,8 @@ class OnionSocket():
             destination=A,
             data=encryptor.encrypt(message2.to_json_string(), key_a)
         )
-        print("exit_message:", exit_message)
-        print("message3", message3)
-        print("message2", message2)
-        print("message1", message1)
+        print("\nexit_message:", exit_message)
+        print("\nmessage3", message3)
+        print("\nmessage2", message2)
+        print("\nmessage1", message1)
         self.node.send_message(message1)
