@@ -8,21 +8,29 @@ import sys
 from threading import Thread, Lock
 from queues import ClosableQueue
 
-PUBLIC_MODULUS = 23
+PUBLIC_ROOT = 23
 PUBLIC_BASE = 5
 
+MAX_PUBLIC_KEY_LENGTH_BYTES = 1024
 
-class DiffieHellmanReceiver(threading.Thread):
-    """
-    Defines a worker responsible for answering key-exchange requests
+
+class DiffieHellmanReceiver(Thread):
+    """ Defines a worker responsible for answering key-exchange requests.
+
+    Whenever a request is received at the :receiving_port:, the key exchange
+    takes place, and the resulting shared_key and public_key are put until the
+    :shared_secrets: dict.
     """
 
     def __init__(self, receiving_port, private_key, shared_secrets):
-        """
-        Creates a new Receiver.
+        """ Creates a new Receiver Thread that responds to key exchange requests.
 
-        :shared_secrets: : the dictionary of shared_secrets. The receiver will add secret keys to it.
+        Arguments:
+            - receiving_port: The port on which to listen for requests.
+            - private_key: The private key to use while creating keys.
+            - shared_secrets: : the dictionary of shared_secrets.
         """
+        super().__init__()
         self._private_key = private_key
 
         self._host = socket.gethostname()
@@ -35,17 +43,20 @@ class DiffieHellmanReceiver(threading.Thread):
     def run(self):
         self.running = True
         with socket.socket() as receiving_socket:
+            receiving_socket.bind((self._host, self._port))
             receiving_socket.listen()  # Listen
 
             while self.running:
                 client_socket, address = receiving_socket.accept()
-                task = KeyExchangeTask(
-                    client_socket,
-                    address,
-                    self.private_key,
-                    self.shared_secrets
+                print(f"got a connection from {address}")
+                client_specific_thread = Thread(
+                    target=get_and_store_keys(
+                        client_socket,
+                        address,
+                        self._private_key,
+                        self.shared_secrets
+                    )
                 )
-                client_specific_thread = Thread(target=task)
                 client_specific_thread.start()
 
     @property
@@ -58,66 +69,61 @@ class DiffieHellmanReceiver(threading.Thread):
         with self._running_lock:
             self._running_flag = value
 
-
-class KeyExchangeTask(object):
-    def __init__(self, exchange_socket, address, private_key, shared_secrets):
-
-        self._exchange_socket = exchange_socket
-        self._address = address
-        self._private_key = private_key
-
-        self.shared_secrets
-
-        self._my_number = PUBLIC_BASE ** self._private_key % PUBLIC_MODULUS
-
-    def __call__(self):
-        self._exchange_socket.send(bytes(self._my_number))
-        client_public_number_bytes = self._exchange_socket.recv(1024)
-        client_public_number = int.from_bytes(client_public_number_bytes, sys.byteorder)
-
-        our_shared_secret = (client_public_number ** self._private_key) % PUBLIC_MODULUS
-
-        with self.parent_task.lock:
-            parent_thread.shared_secrets[self._address] = our_shared_secret
-
-        self._exchange_socket.close()
+    def stop(self):
+        self.running = False
 
 
-class DiffieHellmanSender(object):
-    def __init__(self, private_key):
-        self._private_key = private_key
+def get_and_store_keys(client_socket, address, private_key, shared_secrets):
+    """ Retrieves the shared secret using *exchange_keys()* and stores it in the
+    given dict as a tuple (public_key, shared_secret).
+    """
+    public_key, secret = exchange_keys(client_socket, private_key)
+    print(f"public key: {public_key}, secret: {secret}")
+    shared_secrets[address] = (public_key, secret)
+    client_socket.close()
 
-        self.shared_secrets = {}
-        self._lock = Lock
-    
-    def exchange_keys(self, server_ip, server_receiving_port):
-        their_public_key, our_shared_secret = initiate_key_exchange(
-            self._server_ip,
-            self._server_receiving_port,
-            self._private_key
-        )
 
-    # def get_shared_secret(self, server_ip, server_receiving_port):
-    #     exchangeThread = Thread(None, target=initiate_key_exchange(
-    #         self.add_shared_secret,
-    #         server_ip,
-    #         server_receiving_port,
-    #         self._private_key
-    #     ))
-    #     exchangeThread.join()
+def get_shared_secret(server_ip, server_receiving_port, private_key):
+    """Perform a key exchange with the specified remote host.
+    Returns:
+        a tuple containing (the other host's public key, our shared secret)
+    """
+    with socket.socket() as my_socket:
+        my_socket.connect((server_ip, server_receiving_port))
+        return exchange_keys(my_socket, private_key)
 
-    def initiate_key_exchange(server_ip, server_receiving_port, private_key):
-        socket = socket.socket()
-        socket.connect((server_ip, server_receiving_port))
 
-        my_number = PUBLIC_BASE ** self._private_key % PUBLIC_MODULUS
+def exchange_keys(exchange_socket, private_key):
+    """ exchange public keys over the given socket. """
+    my_number = compute_public_key(private_key)
+    print
+    exchange_socket.send(key_to_bytes(my_number))
+    server_key_in_bytes = exchange_socket.recv(MAX_PUBLIC_KEY_LENGTH_BYTES)
+    server_public_key = key_from_bytes(server_key_in_bytes)
+    print(f"sent {my_number}, received {server_public_key}")
+    our_shared_secret = compute_shared_secret(private_key, server_public_key)
+    return server_public_key, our_shared_secret
 
-        socket.send(bytes(my_number))
 
-        their_number_in_bytes = socket.recv(1024)
-        their_number = int.from_bytes(their_number_in_bytes, sys.byteorder)
-        print("Their number is ", their_number)
+def compute_public_key(private_key):
+    """ Computes the public key associated with the given private key. 
 
-        our_shared_secret = (their_number ** private_key) % PUBLIC_MODULUS
-        print("Our shared secret is", our_shared_secret)
-        return their_number, our_shared_secret
+    Uses the publicly available PUBLIC_BASE and PUBLIC_MODULUS variables.
+    """
+    return PUBLIC_BASE ** private_key % PUBLIC_ROOT
+
+
+def compute_shared_secret(private_key, other_public_key):
+    """ Computes the shared secret given the private key and the peer's
+    public key. """
+    return (other_public_key ** private_key) % PUBLIC_ROOT
+
+
+
+
+def key_from_bytes(some_bytes: bytes) -> int:
+    return int.from_bytes(some_bytes, sys.byteorder)
+
+
+def key_to_bytes(key: int) -> bytes:
+    return key.to_bytes(MAX_PUBLIC_KEY_LENGTH_BYTES, sys.byteorder)

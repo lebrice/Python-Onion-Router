@@ -6,19 +6,36 @@ import math
 
 class Encryptor:
     """Class responsible for encrypting and decrypting messages"""
+    @staticmethod
     def encrypt(message, key):
         """Encode a message using the given key"""
         # TODO: encrypt the message using the key.
         raise NotImplementedError()
 
+    @staticmethod
     def decrypt(message, key):
         """Decode a message using the given key"""
         # TODO: encrypt the message using the key.S
         raise NotImplementedError()
 
+    @classmethod
+    def successive_encrypt(cls, message, *keys):
+        result = message
+        for key in keys:
+            result = cls.encrypt(result, key)
+        return result
+
+    @classmethod
+    def successive_decrypt(cls, message, *keys):
+        result = message
+        for key in keys:
+            result = cls.decrypt(result, key)
+        return result
+
 
 class SimpleAdditionEncriptor(Encryptor):
     """Simply adds and subtracts the key to the message"""
+
     def encrypt(message, key):
         int_value = _to_int(message)
         int_key = _to_int(key)
@@ -45,6 +62,15 @@ class SimpleAdditionEncriptor(Encryptor):
         decripted_bytes = _to_bytes(decripted_int)
         decripted_message = _to_string(decripted_bytes)
         return decripted_message
+
+
+class DoNothingEncryptor(Encryptor):
+    """ An encryptor that does nothing. Used in testing."""
+    def encrypt(message: bytes, key):
+        return message
+
+    def decrypt(message: bytes, key):
+        return message
 
 
 def _to_string(data):
