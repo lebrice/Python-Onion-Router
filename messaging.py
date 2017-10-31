@@ -6,6 +6,9 @@ Module where message format, encoding and decoding is defined.
 import json
 from json import JSONEncoder, JSONDecodeError
 
+import collections
+IpInfo = collections.namedtuple("IpInfo", ["ip", "port"])
+
 
 class JsonConversionMixin(object):
     """
@@ -73,8 +76,8 @@ class OnionMessage(ToDictMixin, JsonConversionMixin):
     HEADER = "ONION ROUTING G12"
 
     def __init__(self,
-                 source=None,
-                 destination=None,
+                 source: IpInfo = None,
+                 destination: IpInfo = None,
                  data=None,
                  header=HEADER,
                  ):
