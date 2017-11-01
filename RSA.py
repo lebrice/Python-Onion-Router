@@ -88,7 +88,11 @@ def get_private_key_rsa():
     # extended euclidean algorithm
     private_exp = mulinv(public_exp, phi)
 
-    return mod, public_exp, private_exp
+    rsa_keys = {}
+    rsa_keys["modulus"] = mod
+    rsa_keys["public"] = public_exp
+    rsa_keys["private"] = private_exp
+    return rsa_keys
 
 
 def encrypt_RSA(message, e, n):

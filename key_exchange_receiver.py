@@ -2,53 +2,49 @@ import socket
 import sys
 from threading import Thread, Lock
 import RSA
+import json
 
 BUFFER_SIZE = 1024 #Constant for now, no defined header format
 
 class KeyExchangeReceiver(Thread):
-    """ Defines a worker responsible for answering key-exchange requests.
-
-    Whenever a request is received at the :receiving_port:, the key exchange
-    takes place, and the resulting shared_key and public_key are put until the
-    :shared_secrets: dict.
+    """
+    Takes care of a key exchange request. Receives the socket where the request was made
     """
 
-    def __init__(self, receiving_socket, shared_secrets):
+    def __init__(self, client_socket, shared_secrets, rsa_keys):
         super().__init__()
-        self._receiving_socket = receiving_socket
+        self._client_socket = client_socket
         self.shared_secrets = shared_secrets
-
-        self._running_flag = False
-        self._running_lock = Lock()
+        self.modulus = rsa_keys["modulus"]
+        self.public_key = rsa_keys["public"]
+        self.private_key = rsa_keys["private"]
 
     def run(self):
         self.send_public_keys()
 
-    @property
-    def running(self) -> bool:
-        with self._running_lock:
-            return self._running_flag
-
-    @running.setter
-    def running(self, value: bool):
-        with self._running_lock:
-            self._running_flag = value
-
-    def stop(self):
-        self.running = False
-
     def send_public_keys(self):
-        """Create a public key, private key and modulus for key exchange, add shared key to shared secrets
-        TODO: Determine how the shared keys will be indexed"""
-        n, e, d = RSA.get_private_key_rsa()
-        public_keys = "{}:{}".format(e, n)
-        self._receiving_socket.send(public_keys.encode())
-        cipher_shared_key = int((self._receiving_socket.recv(BUFFER_SIZE)).decode())
-        if not cipher_shared_key:
+        public_keys = {"public_key" : self.public_key, "modulus" : self.modulus}
+        json_keys = json.dumps(public_keys)
+        self._client_socket.send(json_keys.encode(encoding='UTF-8'))
+        try:
+            rec_bytes = self._client_socket.recv(BUFFER_SIZE)
+        except socket.timeout:
+            self._client_socket.close()
             return
-        self._receiving_socket.close()
-        shared_key = RSA.decrypt_RSA(cipher_shared_key, d, n)
-        #currently just appending shared key to the list, need to determine how they will be indexed
-        self.shared_secrets.append(shared_key)
+        json_shared_key = json.loads(rec_bytes)
+        if "cipher_key" not in json_shared_key or "id" not in json_shared_key:
+            self._client_socket.close()
+            return
+        cipher_shared_key = json_shared_key['cipher_key']
+        circuit_id = json_shared_key['id']
+        try:
+            cipher_shared_key = int(cipher_shared_key)
+            circuit_id = int(circuit_id)
+        except ValueError:
+            self._client_socket.close()
+            return
+        shared_key = RSA.decrypt_RSA(cipher_shared_key, self.private_key, self.modulus)
+        #index shared key by circuit
+        self.shared_secrets[circuit_id] = shared_key
 
 

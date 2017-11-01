@@ -33,7 +33,7 @@ class Encryptor:
         return result
 
 
-class SimpleAdditionEncriptor(Encryptor):
+class SimpleAdditionEncryptor(Encryptor):
     """Simply adds and subtracts the key to the message"""
 
     def encrypt(message, key):
