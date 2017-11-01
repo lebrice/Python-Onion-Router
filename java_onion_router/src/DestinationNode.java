@@ -1,6 +1,7 @@
 import java.io.*;
 import java.net.*;
 
+// The destination node is temporary.
 public class DestinationNode
 {
 	public static void main(String[] args) throws Exception
