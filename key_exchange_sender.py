@@ -22,7 +22,6 @@ class KeyExchangeSender(Thread):
         self.client_socket.settimeout(DEFAULT_TIMEOUT)
         self.client_socket.connect((neighbour.ip, neighbour.port))
 
-
     def run(self):
         self.send_shared_key()
 
@@ -41,7 +40,7 @@ class KeyExchangeSender(Thread):
             return
         public_key = json_public_keys["public_key"]
         modulus = json_public_keys["modulus"]
-        #generate random shared key, length of 16
+        #generate random shared key, length of 16 (constant for now)
         #generate circuit id, not currently used
         shared_key = ''.join(random.SystemRandom().choice(string.ascii_uppercase + string.digits) for _ in range(16))
         ciphered_shared_key = RSA.encrypt_RSA(shared_key, public_key, modulus)
