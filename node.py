@@ -22,6 +22,7 @@ MOM_RECEIVING_PORT = 12345
 DEFAULT_TIMEOUT = 1  # timeout value for all blocking socket operations.
 
 
+
 class OnionNode(threading.Thread, SimpleAdditionEncryptor):
     """A Node in the onion-routing network"""
 
@@ -130,6 +131,36 @@ class OnionNode(threading.Thread, SimpleAdditionEncryptor):
         with socket.socket() as _socket:
             _socket.settimeout(DEFAULT_TIMEOUT)
             _socket.connect((MOM_IP, MOM_RECEIVING_PORT))
+
+            message = OnionMessage(
+                header="GET_NEIGHBOURS",
+                destination=MOM_IP
+            )
+
+            print("OnionNode is writing a message:", message)
+            _socket.sendall(message.to_bytes())
+            response_bytes = _socket.recv(1024)
+
+            response_str = str(response_bytes, encoding="utf-8")
+            response = OnionMessage.from_json_string(response_str)
+
+            neighbours = convert_to_tuples(response.data)
+            print(f"OnionNode received list of neighbours back: {neighbours}")
+            return neighbours
+
+    def send_message(self, message: OnionMessage):
+        target_ip, target_port = message.destination
+        with socket.socket() as _socket:
+            _socket.connect((target_ip, target_port))
+            _socket.sendall(message.to_bytes())
+
+
+def convert_to_tuples(list_of_lists):
+    """ Helper method that converts a list of lists into a list of tuples. """
+    tuples = []
+    for l in list_of_lists:
+        tuples.append(tuple(l))
+    return tuples
 
             message = OnionMessage(
                 header="GET_NEIGHBOURS",
