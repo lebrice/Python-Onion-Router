@@ -14,6 +14,7 @@ from encryption import *
 from workers import *
 from queues import *
 from messaging import IpInfo
+import key_exchange_receiver as keyrec
 
 MOM_IP = socket.gethostname()
 MOM_RECEIVING_PORT = 12345
@@ -21,7 +22,7 @@ MOM_RECEIVING_PORT = 12345
 DEFAULT_TIMEOUT = 1  # timeout value for all blocking socket operations.
 
 
-class OnionNode(threading.Thread, SimpleAdditionEncriptor):
+class OnionNode(threading.Thread, SimpleAdditionEncryptor):
     """A Node in the onion-routing network"""
 
     def __init__(self, name, receiving_port, private_key):
@@ -53,7 +54,8 @@ class OnionNode(threading.Thread, SimpleAdditionEncriptor):
                 # Wait for the next message to arrive.
                 try:
                     client_socket, address = receiving_socket.accept()
-                    self.process_message(message)
+                    self.process_message(message, client_socket)
+                    #TODO: do not close when key exchange is in process, socket is sent
                     client_socket.close()
                 except socket.timeout:
                     continue
@@ -94,11 +96,16 @@ class OnionNode(threading.Thread, SimpleAdditionEncriptor):
         self.running = False
         self.join()
 
-    def process_message(self, message):
+    def process_message(self, message, socket):
         """
         TODO: main application logic.
         - Figure out what to do with a message: is it supposed to be forwarded
         to another node ?
+        If key exchange is wanted, forward socket to key exchange receiver
+        Key
+        ex:
+        key_exchange = keyrec.KeyExchangeReceiver(socket, self.shared_secrets)
+        key_exchange.start()
         """
         # if OnionMessage.is_meant_for_me(self, message):
         #     # Do something
@@ -155,7 +162,7 @@ def convert_to_tuples(list_of_lists):
     return tuples
 
 
-class DirectoryNode(Thread, SimpleAdditionEncriptor):
+class DirectoryNode(Thread, SimpleAdditionEncryptor):
     """ Central node, coordinates the onion network.
     TODO: implement this.
     """
