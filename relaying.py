@@ -150,6 +150,7 @@ class SocketReader(Thread):
             received_count = self.recv_socket.recv_into(buffer)
             empty = received_count == 0
 
+        self.recv_socket.close()
         self.closed = True
 
 
