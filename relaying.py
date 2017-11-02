@@ -59,7 +59,10 @@ class IntermediateRelay(Thread):
         self.prev_reader = SocketReader(self.prev_socket, prev_buffer)
         self.next_reader = SocketReader(self.next_socket, next_buffer)
 
-        while(not self.prev_reader.closed and not self.next_reader.closed):
+        self.prev_reader.start()
+        self.next_reader.start()
+
+        while (not self.prev_reader.closed) and (not self.next_reader.closed):
             # send to next node
             for message in prev_buffer:
                 self.process_and_send(message, self.next_socket)
@@ -78,6 +81,7 @@ class IntermediateRelay(Thread):
             # over to next, then close next.
             for message in prev_buffer:
                 self.process_and_send(message, self.next_socket)
+            self.next_socket.shutdown(flag=socket.SHUT_WR)
             self.next_socket.close()
 
         elif self.next_reader.closed:
@@ -85,7 +89,11 @@ class IntermediateRelay(Thread):
             # over to next, then close next.
             for message in next_buffer:
                 self.process_and_send(message, self.prev_socket)
+            self.prev_socket.shutdown(flag=socket.SHUT_WR)
             self.prev_socket.close()
+
+        else:
+            raise RuntimeError("Some weird error ocurred.")
 
     def process_and_send(self, message, destination_socket):
         """ Processes, then sends the given message to the given
