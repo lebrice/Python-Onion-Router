@@ -3,7 +3,7 @@
 This module defines the Workers/Threads that are used to handle relaying
 messages from one socket to another.
 """
-
+import json
 import socket
 from socket import SocketType
 from threading import Thread
@@ -66,10 +66,12 @@ class IntermediateRelay(Thread):
             # send to next node
             for message in prev_buffer:
                 self.process_and_send(message, self.next_socket)
+                prev_buffer.remove(message)
 
             # send to prev node
             for message in next_buffer:
                 self.process_and_send(message, self.prev_socket)
+                next_buffer.remove(message)
 
         # One of the two closed.
 
@@ -81,6 +83,7 @@ class IntermediateRelay(Thread):
             # over to next, then close next.
             for message in prev_buffer:
                 self.process_and_send(message, self.next_socket)
+                prev_buffer.remove(message)
             self.next_socket.shutdown(flag=socket.SHUT_WR)
             self.next_socket.close()
 
@@ -89,6 +92,7 @@ class IntermediateRelay(Thread):
             # over to next, then close next.
             for message in next_buffer:
                 self.process_and_send(message, self.prev_socket)
+                next_buffer.remove(message)
             self.prev_socket.shutdown(flag=socket.SHUT_WR)
             self.prev_socket.close()
 
@@ -116,61 +120,43 @@ class IntermediateRelay(Thread):
 
 
 class SocketReader(Thread):
-    def __init__(self, p_socket, received_buffer):
-        self.sock = p_socket
-        self.received_buffer = received_buffer
+    """
+    Reads from a given socket, and whenever it receives a message, adds it
+    in the given received_messages list.
+    """
+    def __init__(self, _socket: SocketType, received_messages: List):
+        super().__init__()
+        self.recv_socket = _socket
+        self.received_messages = received_messages
+        self.closed = False
 
-    def read_from_socket(self, p_socket: SocketType):
-        """ Read from the given socket.
-        """
-        received_string = ""
-        empty = False
+    def run(self):
+        buffer = bytes(BUFFER_SIZE)
+        received_count = self.recv_socket.recv_into(buffer)
+        empty = received_count == 0
 
         while not empty:
-            buffer = p_socket.recv(1024)
-            empty = (buffer == b'')
-            string = str(buffer, encoding='UTF-8')
-            received_string += string
+            received_string = str(buffer, encoding="UTF-8")
+            received_objects = split_into_objects(received_string)
 
-            objects = list(split_into_objects(received_string))
-            object_count = len(objects)
-            if object_count > 0:
-                pass
-                # We made an object out of what we have so far!
-                # Proceed to return this object, and 
-            else:
-                # We have not received an object yet. keep going.
-                continue
+            total_length_used = 0
+            for obj, length in received_objects:
+                received_messages.append(obj)
+                total_length_used += length
 
+            # Remove the bytes we used.
+            buffer = buffer[total_length_used:]
 
+            received_count = self.recv_socket.recv_into(buffer)
+            empty = received_count == 0
 
-
-
-        # print("Received string:", received_string)
-
-        # TODO: Might want to take this out, and simply return the
-        # bytes that we receive, one at a time, since not everyone
-        # might want to use this "split into objects" functionality.
-        objects = split_into_objects(received_string)
-        count = 0
-
-        with self._out_queue:
-            for obj in objects:
-                self._out_queue.put(obj)
-                count += 1
-                # print("received_object: ", obj)
-
-        print(f"done receiving {count} objects for this connection.")
-
-    def both_are_open(self):
-        """ Check that both sockets are open. """
-        raise NotImplementedError()
-
+        self.closed = True
 
 
 def split_into_objects(string):
     """
-    splits the given string into a series of JSON objects.
+    splits the given string into a series of tuples:
+    (JSON object, length of string used to create that object).
     """
     import json
     string_so_far = ""
@@ -185,7 +171,8 @@ def split_into_objects(string):
         if open_bracket_count == closed_bracket_count:
             try:
                 obj = json.loads(string_so_far)
-                yield obj  # Return the object, since the parsing worked.
+                # Return the object, since the parsing worked.
+                yield (obj, len(string_so_far))
 
             except json.JSONDecodeError:
                 pass  # OK. that wasn't a valid json. Keep trying.
