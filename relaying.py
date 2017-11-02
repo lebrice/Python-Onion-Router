@@ -51,7 +51,7 @@ class IntermediateRelay(Thread):
             - Listen for messages from next socket
             - copy the messages to the prev socket
 
-        TODO: This is just pseudocode for now.
+            until either of them closes its socket.
         """
         prev_buffer = []  # messages received from the prev_socket.
         next_buffer = []  # messages received from the next_socket.
