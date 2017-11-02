@@ -37,8 +37,8 @@ class IntermediateRelay(Thread):
         self.prev_socket = previous_socket
         self.next_socket = next_socket
 
-        self.prev_reader: List[OnionMessage] = None
-        self.next_reader: List[OnionMessage] = None
+        self.prev_reader: SocketReader = None
+        self.next_reader: SocketReader = None
 
     def run(self):
         """ Begin relaying messages from one socket to another.
