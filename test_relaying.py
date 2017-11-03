@@ -74,7 +74,6 @@ class SocketReaderTestCase(unittest.TestCase):
         self.assert_well_received(test_message)
 
     def assert_well_received(self, test_message):
-        
         sent_obj = json.loads(test_message)
         received_objects = []
 
@@ -87,10 +86,10 @@ class SocketReaderTestCase(unittest.TestCase):
 
         sender.start()
         client_socket, address = recv_socket.accept()
-        recv_socket.close()
-
         reader = SocketReader(client_socket, received_objects)
         reader.start()
+
+        recv_socket.close()
 
         # give time for the reader to receive the message.
         time.sleep(0.2)
