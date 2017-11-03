@@ -34,29 +34,60 @@ class SplitIntoObjectsTestCase(unittest.TestCase):
             self.assertEqual(length, len(useful_chars))
             self.assertEqual(obj, json.loads(useful_chars))
 
-
 HOST = socket.gethostname()
+PORT = 12345
 
 
 class SocketReaderTestCase(unittest.TestCase):
+
+    def setUp(self):
+        # Change ports each time, such that the tests dont conflict with one
+        # another.
+        global PORT
+        PORT += 1
+        self.port = PORT
+
     def test_socket_reader_receives_message(self):
         test_message = """
         {
             "value": 10
         }
         """
+        self.assert_well_received(test_message)
+
+    def test_works_with_fraction_of_buffer_size(self):
+        string = random_string(int(BUFFER_SIZE * 1.5))
+        test_message = f"""
+        {{
+            "value": "{string}"
+        }}
+        """
+        self.assert_well_received(test_message)
+
+    def test_works_with_long_messages(self):
+        string = random_string(BUFFER_SIZE * 5)
+        test_message = f"""
+        {{
+            "value": "{string}"
+        }}
+        """
+        self.assert_well_received(test_message)
+
+    def assert_well_received(self, test_message):
+        
         sent_obj = json.loads(test_message)
         received_objects = []
 
-        sender = TestMessageSender(12345, test_message)
+        sender = TestMessageSender(self.port, test_message)
 
         recv_socket = socket.socket()
-        recv_socket.bind((HOST, 12345))
+        recv_socket.bind((HOST, self.port))
 
         recv_socket.listen()
 
         sender.start()
         client_socket, address = recv_socket.accept()
+        recv_socket.close()
 
         reader = SocketReader(client_socket, received_objects)
         reader.start()
@@ -89,3 +120,7 @@ class TestMessageSender(threading.Thread):
         self._socket.close()
 
 
+def random_string(length):
+    import random
+    import string
+    return ''.join(random.choices(string.ascii_uppercase + string.digits, k=length))

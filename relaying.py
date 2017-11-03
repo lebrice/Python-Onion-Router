@@ -131,24 +131,25 @@ class SocketReader(Thread):
         self.closed = False
 
     def run(self):
-        buffer = bytearray(BUFFER_SIZE)
-        received_count = self.recv_socket.recv_into(buffer)
-        empty = received_count == 0
+        received_so_far = ""
+
+        empty = False
 
         while not empty:
-            received_string = str(buffer, encoding="UTF-8")
-            received_objects = split_into_objects(received_string)
+            received_bytes = self.recv_socket.recv(BUFFER_SIZE)
+            
+            empty = (received_bytes == b'')
+            if empty:
+                break
+            received_string = str(received_bytes, encoding="UTF-8")
+            received_so_far += received_string
 
-            total_length_used = 0
+            received_objects = split_into_objects(received_so_far)
+
             for obj, length in received_objects:
                 self.received_messages.append(obj)
-                total_length_used += length
-
-            # Remove the bytes we used.
-            buffer = buffer[total_length_used:]
-
-            received_count = self.recv_socket.recv_into(buffer)
-            empty = received_count == 0
+                # Remove the bytes we used.
+                received_so_far = received_so_far[length:]
 
         self.recv_socket.close()
         self.closed = True
