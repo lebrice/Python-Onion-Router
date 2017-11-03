@@ -131,7 +131,7 @@ class SocketReader(Thread):
         self.closed = False
 
     def run(self):
-        buffer = bytes(BUFFER_SIZE)
+        buffer = bytearray(BUFFER_SIZE)
         received_count = self.recv_socket.recv_into(buffer)
         empty = received_count == 0
 
@@ -141,7 +141,7 @@ class SocketReader(Thread):
 
             total_length_used = 0
             for obj, length in received_objects:
-                received_messages.append(obj)
+                self.received_messages.append(obj)
                 total_length_used += length
 
             # Remove the bytes we used.
