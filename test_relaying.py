@@ -99,6 +99,40 @@ class SocketReaderTestCase(unittest.TestCase):
         self.assertTrue(reader.closed)
         self.assertIn(sent_obj, received_objects)
 
+    def test_closes_properly(self):
+        test_message = """
+        {
+            "value": 123
+        }
+        """
+        sent_obj = json.loads(test_message)
+        received_objects = []
+
+        sender = TestMessageSender(self.port, test_message)
+
+        recv_socket = socket.socket()
+        recv_socket.bind((HOST, self.port))
+
+        recv_socket.listen()
+
+        sender.start()
+        client_socket, address = recv_socket.accept()
+        reader = SocketReader(client_socket, received_objects)
+        reader.start()
+
+        recv_socket.close()
+
+        # give time for the reader to receive the message.
+        time.sleep(0.2)
+        # The reader should still have its socket open, even if the entire
+        # message was sent.
+        self.assertFalse(reader.closed)
+        # Close the sender
+        sender.close()
+        time.sleep(0.1)
+        # The reader should have closed its end by now.
+        self.assertTrue(reader.closed)
+
 
 class TestMessageSender(threading.Thread):
     def __init__(self, target_port, message_to_send):
