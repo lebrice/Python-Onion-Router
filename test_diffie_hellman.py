@@ -26,7 +26,7 @@ class DiffieHellmanTestCase(unittest.TestCase):
         )
         receiver.stop()
         receiver.join()
-        print(server_shared_secrets)
+        # print(server_shared_secrets)
         
         self.assertEqual(
             receiver_public_key,

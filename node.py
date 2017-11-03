@@ -129,7 +129,7 @@ class OnionNode(threading.Thread, SimpleAdditionEncriptor):
                 destination=MOM_IP
             )
 
-            print("OnionNode is writing a message:", message)
+            # print("OnionNode is writing a message:", message)
             _socket.sendall(message.to_bytes())
             response_bytes = _socket.recv(1024)
 
@@ -137,7 +137,7 @@ class OnionNode(threading.Thread, SimpleAdditionEncriptor):
             response = OnionMessage.from_json_string(response_str)
 
             neighbours = convert_to_tuples(response.data)
-            print(f"OnionNode received list of neighbours back: {neighbours}")
+            # print(f"OnionNode received list of neighbours back: {neighbours}")
             return neighbours
 
     def send_message(self, message: OnionMessage):
@@ -178,14 +178,14 @@ class DirectoryNode(Thread, SimpleAdditionEncriptor):
             recv_socket.listen()
             while self.running:
                 # TODO: Implement this for real.
-                print("Directory Node is running.")
+                # print("Directory Node is running.")
                 try:
                     client_socket, client_address = recv_socket.accept()
                     with client_socket:  # Closes it automatically.
                         client_socket.settimeout(DEFAULT_TIMEOUT)
                         message_bytes = client_socket.recv(1024)
                         message_str = str(message_bytes, encoding='utf-8')
-                        print("Directory node received message:", message_str)
+                        # print("Directory node received message:", message_str)
 
                         if not OnionMessage.is_valid_string(message_str):
                             # TODO: Figure out what to do in such a case.

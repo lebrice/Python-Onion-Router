@@ -110,7 +110,7 @@ class SocketReader(Thread):
                             count += 1
                             # print("received_object: ", obj)
 
-                    print(f"done receiving {count} objects for this connection.")
+                    # print(f"done receiving {count} objects for this connection.")
                     client_socket.close()
                 except socket.timeout:
                     continue
