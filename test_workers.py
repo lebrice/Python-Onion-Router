@@ -110,7 +110,7 @@ class WorkerTestCase(unittest.TestCase):
             self.assertEqual(double(square(index*7)), result)
 
 
-class WorkerTestCase(unittest.TestCase):
+class SplitterWorkerTestCase(unittest.TestCase):
     def setUp(self):
         self.in_queue = ClosableQueue()
         self.out_queue_a = ClosableQueue()
