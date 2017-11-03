@@ -2,6 +2,7 @@
 
 import unittest
 import threading
+import socket
 import time
 
 from relaying import *
@@ -101,6 +102,7 @@ class SocketReaderTestCase(unittest.TestCase):
 
     def test_closes_properly(self):
         test_message = """
+
         {
             "value": 123
         }
@@ -132,6 +134,10 @@ class SocketReaderTestCase(unittest.TestCase):
         time.sleep(0.1)
         # The reader should have closed its end by now.
         self.assertTrue(reader.closed)
+
+
+class IntermediateRelayTestCase(unittest.TestCase):
+    pass  # TODO
 
 
 class TestMessageSender(threading.Thread):
