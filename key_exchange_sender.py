@@ -51,4 +51,5 @@ class KeyExchangeSender(Thread):
         json_shared_key = json.dumps(shared_key_pair)
         self.client_socket.send(json_shared_key.encode(encoding='UTF-8'))
         self.shared_secrets[circuit_id] = shared_key
+        print(shared_key)
         self.client_socket.close()
