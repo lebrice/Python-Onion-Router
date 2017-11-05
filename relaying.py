@@ -125,7 +125,7 @@ class IntermediateRelay(Thread):
         destination_socket.
         """
         # convert to bytes.
-        message_str = str(message)
+        message_str = json.dumps(message)
         message_bytes = message_str.encode()
         # send to previous node
         destination_socket.sendall(message_bytes)

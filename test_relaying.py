@@ -72,7 +72,6 @@ class IntermediateRelayTestCase(unittest.TestCase):
         self.socket_a.sendall(test_message.encode())
 
         received_bytes = self.socket_d.recv(1024)
-        received_string = str(received_bytes)
-        received_obj = json.loads(received_string)
-
-        assertEqual(sent_obj, received_obj)
+        received_string = str(received_bytes, encoding="UTF-8")
+        received_obj = json.loads(received_bytes)
+        self.assertEqual(sent_obj, received_obj)
