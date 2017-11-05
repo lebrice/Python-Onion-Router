@@ -59,7 +59,7 @@ class IntermediateRelayTestCase(unittest.TestCase):
         self.socket_c.close()
         self.socket_d.close()
 
-    def test_read_from_left_goes_to_right(self):
+    def test_sent_from_a_goes_to_d(self):
         test_message = """{"value": 10}"""
         sent_obj = json.loads(test_message)
 
@@ -72,6 +72,23 @@ class IntermediateRelayTestCase(unittest.TestCase):
         self.socket_a.sendall(test_message.encode())
 
         received_bytes = self.socket_d.recv(1024)
+        received_string = str(received_bytes, encoding="UTF-8")
+        received_obj = json.loads(received_bytes)
+        self.assertEqual(sent_obj, received_obj)
+
+    def test_sent_from_d_goes_to_a(self):
+        test_message = """{"value": 10}"""
+        sent_obj = json.loads(test_message)
+
+        relay = IntermediateRelay(
+            self.socket_b,
+            self.socket_c
+        )
+        relay.start()
+
+        self.socket_d.sendall(test_message.encode())
+
+        received_bytes = self.socket_a.recv(1024)
         received_string = str(received_bytes, encoding="UTF-8")
         received_obj = json.loads(received_bytes)
         self.assertEqual(sent_obj, received_obj)
