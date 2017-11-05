@@ -46,6 +46,5 @@ class KeyExchangeReceiver(Thread):
         shared_key = RSA.decrypt_RSA(cipher_shared_key, self.private_key, self.modulus)
         #index shared key by circuit
         self.shared_secrets[circuit_id] = shared_key
-        print(shared_key)
 
 
