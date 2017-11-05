@@ -14,6 +14,9 @@ from encryption import *
 from messaging import IpInfo
 from relaying import IntermediateRelay
 from workers import *
+import RSA
+import key_exchange_receiver as keyrec
+import key_exchange_sender as keysend
 
 MOM_IP = socket.gethostname()
 MOM_RECEIVING_PORT = 12345
@@ -21,18 +24,20 @@ MOM_RECEIVING_PORT = 12345
 DEFAULT_TIMEOUT = 1  # timeout value for all blocking socket operations.
 
 
-class OnionNode(threading.Thread, SimpleAdditionEncriptor):
+
+class OnionNode(threading.Thread, SimpleAdditionEncryptor):
     """A Node in the onion-routing network"""
 
-    def __init__(self, name, receiving_port, private_key):
+    def __init__(self, name, receiving_port):
         super().__init__()
         self._name = name
         self._ip_address = socket.gethostname()
         self._receiving_port = receiving_port
-        self._private_key = private_key
 
         self.neighbours: List[IpInfo] = []
-        self.public_keys = {}
+
+        #Create a public key, private key and modulus for key exchange, add shared key to shared secrets
+        self.rsa_keys = RSA.get_private_key_rsa()
         self.shared_secrets = {}
 
         self._running_lock = Lock()
@@ -53,8 +58,9 @@ class OnionNode(threading.Thread, SimpleAdditionEncriptor):
                 # Wait for the next message to arrive.
                 try:
                     client_socket, address = receiving_socket.accept()
+                    # if message has format {'type': 'key_exchange_request'}
+                    # for example, key exchange request
                     self.process_message(client_socket, message)
-                    client_socket.close()
                 except socket.timeout:
                     continue
 
@@ -63,14 +69,13 @@ class OnionNode(threading.Thread, SimpleAdditionEncriptor):
 
         Calls the directory node and performs key exchanges
         TODO: Implement this for real. This is just pseudocode
+        Use circuit id to index shared_secrets! circuit_id : shared_key
         """
         self.contact_directory_node()
         self.neighbours = self.get_neighbouring_nodes_addresses()
 
         for neighbour in self.neighbours:
-            public_key, shared_key = self.perform_key_exchange_with(neighbour)
-            self.public_keys[neighbour] = public_key
-            self.shared_secrets[neighbour] = shared_key
+            self.perform_key_exchange_with(neighbour)
 
         self.initialized = True
 
@@ -99,6 +104,10 @@ class OnionNode(threading.Thread, SimpleAdditionEncriptor):
         TODO: main application logic.
         - Figure out what to do with a message: is it supposed to be forwarded
         to another node ?
+        If key exchange is wanted, forward socket to key exchange receiver
+        ex:
+        key_exchange = keyrec.KeyExchangeReceiver(socket, self.shared_secrets, self.rsa_keys)
+        key_exchange.start()
         """
         if message.header == "RELAY":
             # NOTE: This might not be exactly how we get the destination.
@@ -136,8 +145,8 @@ class OnionNode(threading.Thread, SimpleAdditionEncriptor):
         """Perform a DH key-exchange with the given neighbour and return the shared key
         TODO: Implement this.
         """
-        return (31, 123)  # Some random values, for the moment.
-        pass
+        key_exchange = keysend.KeyExchangeSender(self.shared_secrets, neighbour)
+        key_exchange.start()
 
     def contact_directory_node(self):
         """TODO: Tell the directory node that we exist, exchange keys with it,
@@ -181,7 +190,7 @@ def convert_to_tuples(list_of_lists):
     return tuples
 
 
-class DirectoryNode(Thread, SimpleAdditionEncriptor):
+class DirectoryNode(Thread, SimpleAdditionEncryptor):
     """ Central node, coordinates the onion network.
     TODO: implement this.
     """
