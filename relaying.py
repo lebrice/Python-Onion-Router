@@ -126,18 +126,8 @@ class IntermediateRelay(Thread):
         """ Processes, then sends the given message to the given
         destination_socket.
         """
-        # See related function docstring
-        processed_message = do_something_with_message(message)
         # convert to bytes.
-        message_str = str(processed_message)
+        message_str = str(message)
         message_bytes = message_str.encode()
         # send to previous node
         destination_socket.sendall(message_bytes)
-
-    def do_something_with_message(self, message):
-        """TODO: handle a message, maybe decrypt something, add some fields,
-        whatever you need to do between receiving a message from one node and
-         forwarding it to the next.
-        """
-        return message
-
