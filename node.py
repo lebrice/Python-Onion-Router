@@ -171,7 +171,7 @@ class OnionNode(threading.Thread, SimpleAdditionEncryptor):
             response_str = str(response_bytes, encoding="utf-8")
             response = OnionMessage.from_json_string(response_str)
 
-            neighbours = convert_to_tuples(response.data)
+            neighbours = convert_to_ip_info(response.data)
             # print(f"OnionNode received list of neighbours back: {neighbours}")
             return neighbours
 
@@ -182,11 +182,11 @@ class OnionNode(threading.Thread, SimpleAdditionEncryptor):
             _socket.sendall(message.to_bytes())
 
 
-def convert_to_tuples(list_of_lists):
+def convert_to_ip_info(list_of_lists):
     """ Helper method that converts a list of lists into a list of tuples. """
     tuples = []
-    for l in list_of_lists:
-        tuples.append(tuple(l))
+    for ip, port in list_of_lists:
+        tuples.append(IpInfo(ip, port))
     return tuples
 
 
