@@ -60,14 +60,19 @@ class IntermediateRelayTestCase(unittest.TestCase):
         self.socket_d.close()
 
     def test_read_from_left_goes_to_right(self):
-        test_message = """{
-            "value": 10
-        }"""
+        test_message = """{"value": 10}"""
         sent_obj = json.loads(test_message)
 
-       
+        relay = IntermediateRelay(
+            self.socket_b,
+            self.socket_c
+        )
+        relay.start()
 
-def random_string(length):
-    import random
-    import string
-    return ''.join(random.choices(string.ascii_uppercase + string.digits, k=length))
+        self.socket_a.sendall(test_message.encode())
+
+        received_bytes = self.socket_d.recv(1024)
+        received_string = str(received_bytes)
+        received_obj = json.loads(received_string)
+
+        assertEqual(sent_obj, received_obj)
