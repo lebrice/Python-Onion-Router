@@ -1,12 +1,12 @@
 #!/usr/bin/python3
 
 import unittest
-import threading
+from threading import Thread
 import socket
 import time
 import json
 
-from relaying import *
+from relaying import IntermediateRelay, SocketReader
 
 HOST = socket.gethostname()
 PORT = 12350
@@ -53,13 +53,11 @@ class IntermediateRelayTestCase(unittest.TestCase):
 
     def tearDown(self):
         global PORT
-        port += 2
+        PORT += 2
         self.socket_a.close()
         self.socket_b.close()
         self.socket_c.close()
         self.socket_d.close()
-
-
 
     def test_read_from_left_goes_to_right(self):
         test_message = """{

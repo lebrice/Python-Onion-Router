@@ -1,16 +1,18 @@
 #!/usr/bin/python3
 
+import socket
 import time
 import unittest
 
+from threading import Thread
 
 from node import OnionNode, DirectoryNode
 import onion_socket
 from onion_socket import OnionSocket
 from errors import *
-from workers import TestSocketReader
 from network_creator import *
 
+HOST = socket.gethostname()
 PRIVATE_KEY = 1443
 
 
@@ -40,13 +42,25 @@ class OnionSocketTestCase(unittest.TestCase):
 
     def test_connect_works(self):
         try:
-            dummyListener = TestSocketReader(12350)
-            dummyListener.start()
-            with OnionSocket.socket(self.get_dummy_onion_node()) as socket:
-                socket.connect(("127.0.0.1", 12350))
-        except OnionError:
-            self.fail("There was an error while connecting to an the host.")
+            some_socket = socket.socket()
+            some_socket.bind((HOST, 12350))
+            some_socket.listen()
+
+            def fun():
+                dummy_listener, _ = some_socket.accept()
+                time.sleep(0.2)
+                dummy_listener.close()
+
+            dummy_thread = Thread(target=fun)
+            dummy_thread.start()
+
+            test_socket = OnionSocket.socket(self.get_dummy_onion_node())
+            test_socket.connect(("127.0.0.1", 12350))
+            test_socket.close()
+        except OnionError as e:
+            self.fail(f"There was an error: {e}")
         finally:
+            some_socket.close()
             dummyListener.stop()
 
     def get_dummy_onion_node(self):
