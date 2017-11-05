@@ -33,8 +33,14 @@ class OnionSocket():
             time.sleep(0.1)  # Thread.yield() equivalent, kindof
 
     @staticmethod
-    @contextmanager
     def socket(onion_node=None):
+        if onion_node is None:
+            onion_node = OnionNode("my_node", 12350, DEFAULT_PRIVATE_KEY)
+        return OnionSocket(onion_node)
+
+    @staticmethod
+    @contextmanager
+    def new_socket(onion_node=None):
         if onion_node is None:
             onion_node = OnionNode("my_node", 12350, DEFAULT_PRIVATE_KEY)
         onion_socket = OnionSocket(onion_node)
