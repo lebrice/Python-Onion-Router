@@ -8,7 +8,7 @@ from node import OnionNode, DirectoryNode
 import onion_socket
 from onion_socket import OnionSocket
 from errors import *
-from workers import SocketReader
+from workers import TestSocketReader
 from network_creator import *
 
 PRIVATE_KEY = 1443
@@ -40,7 +40,7 @@ class OnionSocketTestCase(unittest.TestCase):
 
     def test_connect_works(self):
         try:
-            dummyListener = SocketReader(12350)
+            dummyListener = TestSocketReader(12350)
             dummyListener.start()
             with OnionSocket.socket(self.get_dummy_onion_node()) as socket:
                 socket.connect(("127.0.0.1", 12350))
