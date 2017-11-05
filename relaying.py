@@ -34,12 +34,15 @@ class IntermediateRelay(Thread):
     def __init__(self,
                 left_socket: SocketType,
                 right_socket: SocketType,
+                left_to_right=None,
+                right_to_left=None,
                 ):
         """ Initializes the relay. """
         super().__init__()
         self.left_socket = left_socket
         self.right_socket = right_socket
-
+        self.left_to_right = left_to_right
+        self.right_to_left = right_to_left
         self.left_reader: SocketReader = None
         self.right_reader: SocketReader = None
 
