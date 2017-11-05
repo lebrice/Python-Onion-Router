@@ -14,7 +14,8 @@ PORT = 12350
 
 class IntermediateRelayTestCase(unittest.TestCase):
     """
-    A --> (B  RELAY  C) --> D
+           <RELAY>
+    A --> (B  -  C) --> D
     """
     def setUp(self):
         """ Set up the sockets as illustrated above. """
