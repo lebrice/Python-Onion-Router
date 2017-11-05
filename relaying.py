@@ -19,12 +19,15 @@ class IntermediateRelay(Thread):
     Relays messages from one Node to another.
 
     Params:
-        - previous_socket: Socket connected to the previous node.
-        - next_socket: Socket connected to the next node.
+        - left_socket: Socket connected to the previous node.
+        - right_socket: Socket connected to the next node.
+        - left_to_right: function to be applied for each item taken from
+        left_socket before putting it on right_socket.
+        - right_to_left: function to be applied for each item taken from
+        right_socket before putting it on left_socket.abs
 
-
-    Whenever either socket is closed, the relayer 
-        - One of the sockets is closed
+        NOTE: the functions given should be function(JSON) -> JSON (or
+        OnionMessage, for that matter.)
 
     TODO: Would it be a good idea to use a field in a message, to indicate if
     the connection is to be held open, or closed ?
