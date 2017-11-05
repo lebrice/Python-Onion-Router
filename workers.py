@@ -31,20 +31,23 @@ class SocketReader(Thread):
         empty = False
 
         while not empty:
-            received_bytes = self.recv_socket.recv(BUFFER_SIZE)
-
-            empty = (received_bytes == b'')
-            if empty:
+            try:
+                received_bytes = self.recv_socket.recv(BUFFER_SIZE)
+            except ConnectionAbortedError as e:
                 break
-            received_string = str(received_bytes, encoding="UTF-8")
-            received_so_far += received_string
+            else:
+                empty = (received_bytes == b'')
+                if empty:
+                    break
+                received_string = str(received_bytes, encoding="UTF-8")
+                received_so_far += received_string
 
-            received_objects = split_into_objects_and_lengths(received_so_far)
+                received_objects = split_into_objects_and_lengths(received_so_far)
 
-            for obj, length in received_objects:
-                self.received_messages.append(obj)
-                # Remove the bytes we used.
-                received_so_far = received_so_far[length:]
+                for obj, length in received_objects:
+                    self.received_messages.append(obj)
+                    # Remove the bytes we used.
+                    received_so_far = received_so_far[length:]
 
         self.recv_socket.close()
         self.closed = True
