@@ -104,7 +104,6 @@ class IntermediateRelay(Thread):
                     message = self.left_to_right(message)
                 self._send(message, self.right_socket)
                 left_buffer.remove(message)
-            self.right_socket.shutdown(flag=socket.SHUT_WR)
             self.right_socket.close()
 
         elif self.right_reader.closed:
@@ -116,7 +115,6 @@ class IntermediateRelay(Thread):
                     message = self.right_to_left(message)
                 self._send(message, self.left_socket)
                 right_buffer.remove(message)
-            self.left_socket.shutdown(flag=socket.SHUT_WR)
             self.left_socket.close()
 
         else:
