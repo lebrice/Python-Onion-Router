@@ -92,3 +92,54 @@ class IntermediateRelayTestCase(unittest.TestCase):
         received_string = str(received_bytes, encoding="UTF-8")
         received_obj = json.loads(received_bytes)
         self.assertEqual(sent_obj, received_obj)
+
+    def test_left_to_right_function_is_applied(self):
+        test_message = """{"value": 10}"""
+        sent_obj = json.loads(test_message)
+
+        relay = IntermediateRelay(
+            self.socket_b,
+            self.socket_c,
+            left_to_right=double_value
+        )
+        relay.start()
+
+        self.socket_a.sendall(test_message.encode())
+
+        received_bytes = self.socket_d.recv(1024)
+        received_string = str(received_bytes, encoding="UTF-8")
+        received_obj = json.loads(received_bytes)
+        expected = sent_obj['value'] * 2
+        actual = received_obj['value']
+        self.assertEqual(expected, actual)
+
+    def test_right_to_left_function_is_applied(self):
+        test_message = """{"value": 10}"""
+        sent_obj = json.loads(test_message)
+
+        relay = IntermediateRelay(
+            self.socket_b,
+            self.socket_c,
+            left_to_right=double_value,
+            right_to_left=square_value
+        )
+        relay.start()
+
+        self.socket_d.sendall(test_message.encode())
+
+        received_bytes = self.socket_a.recv(1024)
+        received_string = str(received_bytes, encoding="UTF-8")
+        received_obj = json.loads(received_bytes)
+        expected = sent_obj['value'] ** 2
+        actual = received_obj['value']
+        self.assertEqual(expected, actual)
+
+
+def double_value(message):
+    message['value'] *= 2
+    return message
+
+
+def square_value(message):
+    message['value'] *= message['value']
+    return message
