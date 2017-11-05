@@ -35,7 +35,7 @@ class IntermediateRelay(Thread):
                 left_socket: SocketType,
                 right_socket: SocketType,
                 left_to_right=None,
-                right_to_left=None,
+                right_to_left=None
                 ):
         """ Initializes the relay. """
         super().__init__()
@@ -71,12 +71,18 @@ class IntermediateRelay(Thread):
         while (not self.left_reader.closed) and (not self.right_reader.closed):
             # send to next node
             for message in left_buffer:
-                self.process_and_send(message, self.right_socket)
+                if self.left_to_right:
+                    # If we were given a function to execute
+                    message = self.left_to_right(message)
+                self._send(message, self.right_socket)
                 left_buffer.remove(message)
 
             # send to prev node
             for message in right_buffer:
-                self.process_and_send(message, self.left_socket)
+                if self.right_to_left:
+                    # If we were given a function to execute
+                    message = self.right_to_left(message)
+                self._send(message, self.left_socket)
                 right_buffer.remove(message)
 
         # One of the two closed.
@@ -88,7 +94,10 @@ class IntermediateRelay(Thread):
             # Prev is done sending messages. Send the the rest of its messages
             # over to next, then close next.
             for message in left_buffer:
-                self.process_and_send(message, self.right_socket)
+                if self.left_to_right:
+                    # If we were given a function to execute
+                    message = self.left_to_right(message)
+                self._send(message, self.right_socket)
                 left_buffer.remove(message)
             self.right_socket.shutdown(flag=socket.SHUT_WR)
             self.right_socket.close()
@@ -97,7 +106,10 @@ class IntermediateRelay(Thread):
             # Prev is done sending messages. Send the the rest of its messages
             # over to next, then close next.
             for message in right_buffer:
-                self.process_and_send(message, self.left_socket)
+                if self.right_to_left:
+                    # If we were given a function to execute
+                    message = self.right_to_left(message)
+                self._send(message, self.left_socket)
                 right_buffer.remove(message)
             self.left_socket.shutdown(flag=socket.SHUT_WR)
             self.left_socket.close()
@@ -105,7 +117,7 @@ class IntermediateRelay(Thread):
         else:
             raise RuntimeError("Some weird error ocurred.")
 
-    def process_and_send(self, message, destination_socket):
+    def _send(self, message, destination_socket):
         """ Processes, then sends the given message to the given
         destination_socket.
         """
