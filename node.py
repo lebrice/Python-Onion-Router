@@ -7,13 +7,13 @@ import threading
 import time
 import types
 
+from socket import SocketType
 from typing import List, Dict
 
-from queue import Empty
 from encryption import *
-from workers import *
-from queues import *
 from messaging import IpInfo
+from relaying import IntermediateRelay
+from workers import *
 
 MOM_IP = socket.gethostname()
 MOM_RECEIVING_PORT = 12345
@@ -53,7 +53,7 @@ class OnionNode(threading.Thread, SimpleAdditionEncriptor):
                 # Wait for the next message to arrive.
                 try:
                     client_socket, address = receiving_socket.accept()
-                    self.process_message(message)
+                    self.process_message(client_socket, message)
                     client_socket.close()
                 except socket.timeout:
                     continue
@@ -94,17 +94,43 @@ class OnionNode(threading.Thread, SimpleAdditionEncriptor):
         self.running = False
         self.join()
 
-    def process_message(self, message):
+    def process_message(self, _socket: SocketType, message: OnionMessage):
         """
         TODO: main application logic.
         - Figure out what to do with a message: is it supposed to be forwarded
         to another node ?
         """
-        # if OnionMessage.is_meant_for_me(self, message):
-        #     # Do something
-        # else:
-        #     # Forward the message along.
-        pass
+        if message.header == "RELAY":
+            # NOTE: This might not be exactly how we get the destination.
+            # Nevertheless, this serves as an example of what we can do with
+            # the IntermediateRelay class from relaying.py.
+            new_socket = socket.create_connection(message.destination)
+            relay = IntermediateRelay(
+                _socket,
+                new_socket,
+                self.relay_forward_in_chain(),
+                self.relay_backward_in_chain()
+            )
+            relay.start()
+        # TODO: fill in the other cases.
+
+    def relay_forward_in_chain(self):
+        """returns a function that modifies messages before they are sent
+        forward in the chain.
+        """
+        def handle(message):
+            # TODO: this should be where we modify, encrypt, decrypt, etc.
+            return message
+        return handle
+
+    def relay_backward_in_chain(self):
+        """returns a function that modifies messages before they are sent
+        backward in the chain.
+        """
+        def handle(message):
+            # TODO: this should be where we modify, encrypt, decrypt, etc.
+            return message
+        return handle
 
     def perform_key_exchange_with(self, neighbour: IpInfo):
         """Perform a DH key-exchange with the given neighbour and return the shared key
