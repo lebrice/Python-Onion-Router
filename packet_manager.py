@@ -81,7 +81,8 @@ def new_relay_packet(circID, command, ip, port, data):
             'circID': circID,
             'relayFlag': True,
             'command': command,
-            'encrypt':[{
+            'encrypted':[{
+                'isDecrypted' : True,
                 'ip': ip,
                 'port': port,
                 'data': data
@@ -90,6 +91,7 @@ def new_relay_packet(circID, command, ip, port, data):
         return circID, json.dumps({'circID': circID,
                         'relayFlag': True,
                         'command': command,
-                        'encrypt':[{
+                        'encrypted':[{
+                            'isDecrypted' : True,
                             'data': data
                         }]})

@@ -4,6 +4,7 @@ import collections
 import sys
 import socket
 import threading
+import json
 import time
 import types
 
@@ -12,11 +13,14 @@ from typing import List, Dict
 
 from encryption import *
 from messaging import IpInfo
+import circuit_tables as ct
 from relaying import IntermediateRelay
 from workers import *
 import RSA
+from encryption import FernetEncryptor
 import key_exchange_receiver as keyrec
 import key_exchange_sender as keysend
+import packet_manager as pm
 
 MOM_IP = socket.gethostname()
 MOM_RECEIVING_PORT = 12345
@@ -39,6 +43,10 @@ class OnionNode(threading.Thread, SimpleAdditionEncryptor):
         #Create a public key, private key and modulus for key exchange, add shared key to shared secrets
         self.rsa_keys = RSA.get_private_key_rsa()
         self.shared_secrets = {}
+
+        self.circuit_table = ct.circuit_table()
+        self.node_key_table = ct.node_key_table()
+        self.node_relay_table = ct.node_relay_table()
 
         self._running_lock = Lock()
         self._running_flag = False
@@ -99,7 +107,7 @@ class OnionNode(threading.Thread, SimpleAdditionEncryptor):
         self.running = False
         self.join()
 
-    def process_message(self, _socket: SocketType, message: OnionMessage):
+    def process_message(self, _socket: SocketType, json_object):
         """
         TODO: main application logic.
         - Figure out what to do with a message: is it supposed to be forwarded
@@ -109,19 +117,94 @@ class OnionNode(threading.Thread, SimpleAdditionEncryptor):
         key_exchange = keyrec.KeyExchangeReceiver(socket, self.shared_secrets, self.rsa_keys)
         key_exchange.start()
         """
-        if message.header == "RELAY":
-            # NOTE: This might not be exactly how we get the destination.
-            # Nevertheless, this serves as an example of what we can do with
-            # the IntermediateRelay class from relaying.py.
-            new_socket = socket.create_connection(message.destination)
-            relay = IntermediateRelay(
-                _socket,
-                new_socket,
-                self.relay_forward_in_chain(),
-                self.relay_backward_in_chain()
-            )
-            relay.start()
-        # TODO: fill in the other cases.
+
+        message = json.dumps(json_object)
+
+        if message.relayFlag == True:
+            if message.command == "extend":
+                # message is a relay message; try decrypting the payload
+                key = self.node_key_table.get_key(message.circID)
+                decrypted_payload = FernetEncryptor.decrypt(message.encrypted, key)
+
+                if decrypted_payload.isDecrypted:
+                    # message has extend command and managed to decrypt it
+                    # -> create a new control packet cmd=create, send to next node
+                    destID, pkt = pm.new_control_packet(0, "create", decrypted_payload.data)
+                    self.node_relay_table.add_relay_entry(message.circID, destID)
+
+                    new_socket = socket.create_connection([message.ip, message.port])
+                    relay = IntermediateRelay(
+                        _socket,
+                        new_socket,
+                        self.relay_forward_in_chain(),
+                        self.relay_backward_in_chain()
+                    )
+                    relay.run()
+                    relay._send(pkt, new_socket)
+                else:
+                    # could not decrypt payload, meant for a node further along
+                    # -> get next node addr from table, replace circID, send it along
+                    destID = self.node_relay_table.get_dest_id(message.circID)
+                    message.circID = destID
+                    addr = self.circuit_table.get_address(message.circID)
+                    ip, port = addr.split(':')
+
+                    new_socket = socket.create_connection([ip, port])
+                    relay = IntermediateRelay(
+                        _socket,
+                        new_socket,
+                        self.relay_forward_in_chain(),
+                        self.relay_backward_in_chain()
+                    )
+                    relay.run()
+                    relay._send(message, new_socket)
+
+            elif message.comand == "extended":
+                # node received a confirmation that a node further along was created
+                # TODO
+                return
+            elif message.command == "exch":
+                # message contains a symmetric key, attempt RSA decryption
+                decrypted_payload = RSA.decrypt_RSA(message.encryted, self.rsa_keys["private"], self.rsa_keys["modulus"])
+
+                if decrypted_payload.isDecrypted:
+                    self.node_key_table.add_key_entry(message.circID, decrypted_payload.data)
+                    # TODO: send back confirmation that key was received
+                else:
+                    # could not decrypt payload, meant for a node further along
+                    # -> get next node addr from table, replace circID, send it along
+                    destID = self.node_relay_table.get_dest_id(message.circID)
+                    message.circID = destID
+                    addr = self.circuit_table.get_address(message.circID)
+                    ip, port = addr.split(':')
+
+                    new_socket = socket.create_connection([ip, port])
+                    relay = IntermediateRelay(
+                        _socket,
+                        new_socket,
+                        self.relay_forward_in_chain(),
+                        self.relay_backward_in_chain()
+                    )
+                    relay.run()
+                    relay._send(message, new_socket)
+        else:
+            # message is a control message
+            return
+
+
+        # if message.header == "RELAY":
+        #     # NOTE: This might not be exactly how we get the destination.
+        #     # Nevertheless, this serves as an example of what we can do with
+        #     # the IntermediateRelay class from relaying.py.
+        #     new_socket = socket.create_connection(message.destination)
+        #     relay = IntermediateRelay(
+        #         _socket,
+        #         new_socket,
+        #         self.relay_forward_in_chain(),
+        #         self.relay_backward_in_chain()
+        #     )
+        #     relay.start()
+        # # TODO: fill in the other cases.
 
     def relay_forward_in_chain(self):
         """returns a function that modifies messages before they are sent

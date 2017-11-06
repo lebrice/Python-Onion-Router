@@ -47,13 +47,13 @@ class FernetEncryptor(Encryptor):
     def generate_key(message):
         return Fernet.generate_key()
 
-    def encrypt(message, key, data):
+    def encrypt(message, key):
         cipher_suite = Fernet(key)
-        return cipher_suite.encrypt(data)
+        return cipher_suite.encrypt(message.encrypted)
 
-    def decrypt(message, key, data):
+    def decrypt(message, key):
         cipher_suite = Fernet(key)
-        return cipher_suite.decrypt(data)
+        return cipher_suite.decrypt(message.encrypted)
 
 
 class SimpleAdditionEncryptor(Encryptor):
