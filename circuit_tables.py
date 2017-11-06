@@ -41,30 +41,33 @@ class sender_key_table():
     """
         kv table maintained by sender
         contains all the symmetric keys that were sent to nodes along the path
-        format: ip:port | key
+        format: initial_circID:node # | key
+            ex: bob is the first node (id=10), carol the second node (id unknown to sender)
+                10:1 | bob shared key
+                10:2 | carol shared key
 
     """
 
     def __init__(self):
         table = {}
 
-    def add_key_entry(self, ip, port, symmkey):
-        index = format("{}:{}", ip, port)
+    def add_key_entry(self, circID, nodeNo, symmkey):
+        index = format("{}:{}", circID, nodeNo)
         self.table[index] = symmkey
 
-    def remove_key_entry(self, ip, port):
-        index = format("{}:{}", ip, port)
+    def remove_key_entry(self, circID, nodeNo):
+        index = format("{}:{}", circID, nodeNo)
         try:
             del self.table[index]
         except LookupError:
-            print("ERROR    No such IP address in the key table; could not remove entry")
+            print("ERROR    No such node address in the key table; could not remove entry")
 
-    def get_key(self, ip, port):
-        index = format("{}:{}", ip, port)
+    def get_key(self, circID, nodeNo):
+        index = format("{}:{}", circID, nodeNo)
         try:
             return self.table[index]
         except LookupError:
-            print("ERROR    No such IP address in the key table; could not return key")
+            print("ERROR    No such node address in the key table; could not return key")
 
     def print_table(self):
         for k in self.table.keys():
