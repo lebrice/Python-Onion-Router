@@ -2,39 +2,23 @@
 """
 Defines Workers that will be used to carry out various tasks.
 """
-from threading import Thread
-from queue import Queue
+from contextlib import contextmanager
+from threading import Thread, Lock
+import socket
 
-
-class ClosableQueue(Queue):
-    """
-    Queue subclass that can be closed. By closing the Queue,
-    the threads that are consuming its output are stopped.
-    """
-    SENTINEL = object()
-
-    def close(self):
-        self.put(self.SENTINEL)
-
-    def __iter__(self):
-        while True:
-            item = self.get()
-            try:
-                if item is self.SENTINEL:
-                    return  # Cause the thread to exit.
-                yield item
-            finally:
-                self.task_done()
+from messaging import OnionMessage
+from queues import ClosableQueue
 
 
 class Worker(Thread):
     """
     Takes items from the :in_queue:, executes :func: on them,
-    then places the results on its :out_queue:. 
+    then places the results on its :out_queue:.
     Automatically stops whenever the :in_queue.close(): method is called.
 
     *(see ClosableQueue)*
     """
+
     def __init__(self, func, in_queue, out_queue):
         super().__init__()
         self.func = func
@@ -50,12 +34,13 @@ class Worker(Thread):
 class SplitterWorker(Thread):
     """
     Worker that takes an item from its :in_queue:, and then runs :func: on it.
-    
+
     *func(item) -> bool*
 
     If :func(item): returns :True:, the item is placed on :out_queue_a:
     If :func(item): returns :False:, the item is placed on :out_queue_b:
     """
+
     def __init__(self, func, in_queue, out_queue_a, out_queue_b):
         super().__init__()
         self.func = func
@@ -70,86 +55,175 @@ class SplitterWorker(Thread):
                 self.out_queue_a.put(item)
             else:
                 self.out_queue_b.put(item)
+        self.out_queue_a.close()
+        self.out_queue_b.close()
 
-import socket
-from messaging import OnionMessage
 
 class SocketReader(Thread):
     """
-    Takes the data from a Socket, and tries to parse it into sequences of messages.
-    Parses each message into :out_queue:
+    Takes the data from a Socket, and tries to parse it into sequences of
+    messages.
+
+    Parses each message into a JSON, then passes it to :out_queue:
     """
-    def __init__(self, receiving_port, out_queue):
+
+    def __init__(self, receiving_port):
         super().__init__()
         self.receiving_port = receiving_port
-        self.out_queue = out_queue
-        self.running = False
-    
+        self._out_queue = ClosableQueue()
+        self._running_flag = False
+        self._running_lock = Lock()
+
     def run(self):
-        self.running = True
+        self._running_flag = True
         # Create the receiving socket
         with socket.socket() as recv_socket:
             host = socket.gethostname()
+            recv_socket.settimeout(2)
             recv_socket.bind((host, self.receiving_port))
-            recv_socket.listen()
-
-            bytes_received = 0
+            recv_socket.listen(5)
 
             while self.running:
-                client_socket, address = recv_socket.accept()
-
-                buffer = client_socket.recv(1024)
-                print("Received:", buffer)
-
-                is_valid = False
+                # Safely check if we should stop running.
                 try:
-                    string = str(buffer, encoding='UTF-8')
-                    is_valid = OnionMessage.is_valid_string(string)
-                    print("is_valid:", is_valid)
-                    
+                    client_socket, address = recv_socket.accept()
+                    received_string = ""
+                    empty = False
 
-                except UnicodeDecodeError as err:
-                    print("invalid")
-                else:
-                    message = OnionMessage.from_json_string(string)
-                    self.out_queue.put(message)
+                    while not empty:
+                        buffer = client_socket.recv(1024)
+                        empty = (buffer == b'')
+                        string = str(buffer, encoding='UTF-8')
+                        received_string += string
+
+                    # print("Received string:", received_string)
+
+                    # TODO: Might want to take this out, and simply return the
+                    # bytes that we receive, one at a time, since not everyone
+                    # might want to use this "split into objects" functionality.
+                    objects = split_into_objects(received_string)
+                    count = 0
+
+                    with self._out_queue:
+                        for obj in objects:
+                            self._out_queue.put(obj)
+                            count += 1
+                            # print("received_object: ", obj)
+
+                    print(f"done receiving {count} objects for this connection.")
+                    client_socket.close()
+                except socket.timeout:
+                    continue
+
+    @property
+    def running(self):
+        """ returns if the node is currently running """
+        with self._running_lock:
+            return self._running_flag
+
+    @running.setter
+    def running(self, value):
+        with self._running_lock:
+            self._running_flag = value
 
     def stop(self):
+        """ tells the node to shutdown. """
+        self._out_queue.close()
         self.running = False
         self.join()
 
-def main():
-    received_messages = ClosableQueue(10)
-    reader = SocketReader(12345, received_messages)
-    reader.start()
+    def next(self, block=True, timeout=None):
+        """
+        Waits for the next item and return it. (This is a blocking call)
+        """
+        return self._out_queue.get(block, timeout)
 
-    sender = Thread(target=send)
-    sender.start()
-    sender.join()
-    reader.stop()
-    reader.join()
 
-    message = received_messages.get()
-    print("successfully received:", message)
-
-def send():
-    sock = socket.socket()
-    remote_host = socket.gethostname()
-    remote_host_port = 12345
-    sock.connect((remote_host, remote_host_port))
-
-    bob = """
-        {
-            "header": "ONION ROUTING G12",
-            "source": "127.0.0.1",
-            "destination": "",
-            "data": null
-        }
+def split_into_objects(string):
     """
-    message = OnionMessage.from_json_string(bob)
-    sock.send(message.to_bytes())
-    return
+    splits the given string into a series of JSON objects.
+    """
+    import json
+    string_so_far = ""
+    open_bracket_count = 0
+    closed_bracket_count = 0
+    for char in string:
+        string_so_far += char
+        if char == '{':
+            open_bracket_count += 1
+        elif char == '}':
+            closed_bracket_count += 1
+        if open_bracket_count == closed_bracket_count:
+            try:
+                obj = json.loads(string_so_far)
+                yield obj  # Return the object, since the parsing worked.
+
+            except json.JSONDecodeError:
+                pass  # OK. that wasn't a valid json. Keep trying.
+
+            else:
+                # No exceptions ocurred. We reset the counter variables.
+                string_so_far = ""
+                open_bracket_count = 0
+                closed_bracket_count = 0
 
 
-if __name__ == '__main__':
-    main()
+class SocketWriter(Thread):
+    """
+    Worker that takes messages and writes each of them into a socket connected
+    to the given :ip_address: and :port:
+
+    Whenever the :in_queue:.close() function is called, the SocketWriter will
+    eventually stop.
+    """
+
+    def __init__(self, target_ip, target_port):
+        super().__init__()
+        self._in_queue = ClosableQueue()
+        self._target_ip = target_ip
+        self._target_port = target_port
+
+    def run(self):
+        with socket.socket() as out_socket:
+            out_socket.connect((self._target_ip, self._target_port))
+
+            for message in self._in_queue:
+                string_version = str(message)
+                bytes_to_send = string_version.encode()
+                total_length = len(bytes_to_send)
+                sent_so_far = 0
+
+                while sent_so_far < total_length:
+                    bytes_sent = out_socket.send(bytes_to_send[sent_so_far:])
+                    sent_so_far += bytes_sent
+
+    def write(self, message):
+        """ Puts the given message on the outgoing queue to be sent. """
+        self._in_queue.put(message)
+
+    def close(self):
+        self._in_queue.close()
+
+    @property
+    def input(self):
+        return self._in_queue
+
+
+@contextmanager
+def read_socket(receiving_port) -> SocketReader:
+    reader = SocketReader(receiving_port)
+    try:
+        reader.start()
+        yield reader
+    finally:
+        reader.stop()
+
+
+@contextmanager
+def write_to_socket(target_ip, target_port) -> SocketWriter:
+    writer = SocketWriter(target_ip, target_port)
+    try:
+        writer.start()
+        yield writer
+    finally:
+        writer.close()
