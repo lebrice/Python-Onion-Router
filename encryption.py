@@ -2,6 +2,7 @@
 
 import sys
 import math
+from cryptography.fernet import Fernet
 
 
 class Encryptor:
@@ -31,6 +32,28 @@ class Encryptor:
         for key in keys:
             result = cls.decrypt(result, key)
         return result
+
+
+class FernetEncryptor(Encryptor):
+    """
+        Fernet encryption using Cryptography library
+        steps:
+            1.  generate a key that will be used to encrypt and decrypt
+                this key is symmetric: both the sender and the node have the same copy
+            2.  send key to node, encrypted using RSA after a Diffie-Hellman exchange
+            3.  use key for subsequent encryption layers (the "onion")
+    """
+
+    def generate_key(message):
+        return Fernet.generate_key()
+
+    def encrypt(message, key, data):
+        cipher_suite = Fernet(key)
+        return cipher_suite.encrypt(data)
+
+    def decrypt(message, key, data):
+        cipher_suite = Fernet(key)
+        return cipher_suite.decrypt(data)
 
 
 class SimpleAdditionEncryptor(Encryptor):
