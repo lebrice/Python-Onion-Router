@@ -28,11 +28,15 @@
 
 import packet_manager as pm
 import circuit_tables as ct
+import relaying
+import node
+import RSA
 
-def create_connection():
+def create_connection(node, rsa_keys):
     # fetch IP of next node
-    # get key from rsa
+    # get public key + modulus from rsa
     # make [create] control packet
+    # this is public for now
     # add entry to circuit table
     # send to next node
     return

@@ -4,8 +4,8 @@ class circuit_table():
         contains a list of circuit IDs that have been created, associated with the ip and port to contact
         format: ip:port | circID
     """
-
-    table = {}
+    def __init__(self):
+        table = {}
 
     def add_circuit_entry(self, ip, port, circID):
         index = format("{}:{}", ip, port)
@@ -45,7 +45,8 @@ class sender_key_table():
 
     """
 
-    table = {}
+    def __init__(self):
+        table = {}
 
     def add_key_entry(self, ip, port, symmkey):
         index = format("{}:{}", ip, port)
@@ -77,7 +78,8 @@ class node_key_table():
         format: received_from_circID | key
     """
 
-    table = {}
+    def __init__(self):
+        table = {}
 
     def add_key_entry(self, fromID, symmkey):
         self.table[fromID] = symmkey
@@ -106,7 +108,8 @@ class node_relay_table():
         format: received_from_circID | send_to_circID
     """
 
-    table = {}
+    def __init__(self):
+        table = {}
 
     def add_relay_entry(self, fromID, toID):
         self.table[fromID] = toID

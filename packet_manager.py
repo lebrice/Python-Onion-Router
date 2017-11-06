@@ -1,6 +1,5 @@
 import json
 from random import randint
-import circuit_tables
 
 # keep track of used circuit IDs locally, preventing the reuse of circuit IDs
 # faster than indexing into table; circID is added later
@@ -13,7 +12,7 @@ def new_control_packet(circID, command, data):
     circID: circuit ID. different for each connection between nodes.
 
     control: packet is to be interpreted by the node
-        -> create   : create a new circuit
+        -> create   : create a new circuit (circID arg will be ignored)
         -> created  : new circuit has been created
         -> destroy  : destroy a circuit
 

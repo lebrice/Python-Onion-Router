@@ -11,6 +11,11 @@ from errors import OnionSocketError, OnionNetworkError
 
 from encryption import *
 from messaging import *
+import packet_manager as pm
+import circuit_tables as ct
+import circuit_builder as cb
+import relaying
+import RSA
 
 # TODO: create a new private key for each OnionSocket
 DEFAULT_PRIVATE_KEY = 164
@@ -36,6 +41,9 @@ class OnionSocket():
             self.node = OnionNode("my_node", 12350)
         else:
             self.node = onion_node
+
+        self.circuit_table = ct.circuit_table()
+        self.sender_key_table = ct.sender_key_table()
 
         # TODO: Need to initialize the node properly.
         self.node.start()
@@ -84,57 +92,74 @@ class OnionSocket():
             raise OnionNetworkError(message)
         return random.sample(self.node.neighbours, 3)
 
-    def _create_message(self, data):
-        """ Creates a message, to be send accross the OnionNetwork.
 
-        NOTE: At the moment, it does
+    ###
+    ###    BEGIN CIRCUIT BUILDING
+    ###
 
-            ME ---> A ---> B ---> C ---> EXIT
-        
-        """
-        ME = (socket.gethostname(), self.node._receiving_port)
-        A, B, C = self._select_three_random_neighbours()
-        EXIT = (self.target_ip, self.target_port)
+    def create_connection(self, node, rsa_keys):
+        circID, msg = pm.new_control_packet(0, "create", rsa_keys)
+        self.circuit_table.add_circuit_entry(node.ip, node.port, circID)
 
-        keys = [self.node.shared_secrets.get(n) for n in [A, B, C]]
-        # key_a = self.node.shared_secrets.get(A)
-        # key_a = self.node.shared_secrets.get(A)
-        # key_a = self.node.shared_secrets.get(A)
-        key_a, key_b, key_c = keys
 
-        # TODO: Replace with whichever encryptor makes the most sense.
-        encryptor = DoNothingEncryptor
+    # TODO: how do you get ip/port info from an object returned by select three random neighbor
+    def build_circuit(self):
+        node1, node2, node3 = self._select_three_random_neighbours()
+        rsa_keys = RSA.get_private_key_rsa()
 
-        # NOTE: This is just pseudocode. We might use a very different approach
-        exit_message = OnionMessage(
-            header="EXIT",
-            source=C,
-            destination=EXIT,
-            # TODO: the data between C and the Website needs to be encrypted!
-            data=data
-        )
-        message3 = OnionMessage(
-            header="RELAY",
-            source=B,
-            destination=C,
-            data=encryptor.encrypt(exit_message.to_json_string(), key_c)
-        )
-        message2 = OnionMessage(
-            header="RELAY",
-            source=A,
-            destination=B,
-            data=encryptor.encrypt(message3.to_json_string(), key_b)
-        )
-        message1 = OnionMessage(
-            header="RELAY",
-            source=ME,
-            destination=A,
-            data=encryptor.encrypt(message2.to_json_string(), key_a)
-        )
-        print("\nexit_message:", exit_message)
-        print("\nmessage3", message3)
-        print("\nmessage2", message2)
-        print("\nmessage1", message1)
-        return message1
+
+
+    # def _create_message(self, data):
+    #     """ Creates a message, to be send accross the OnionNetwork.
+    #
+    #     NOTE: At the moment, it does
+    #
+    #         ME ---> A ---> B ---> C ---> EXIT
+    #
+    #     """
+    #     ME = (socket.gethostname(), self.node._receiving_port)
+    #     A, B, C = self._select_three_random_neighbours()
+    #     EXIT = (self.target_ip, self.target_port)
+    #
+    #     keys = [self.node.shared_secrets.get(n) for n in [A, B, C]]
+    #     # key_a = self.node.shared_secrets.get(A)
+    #     # key_a = self.node.shared_secrets.get(A)
+    #     # key_a = self.node.shared_secrets.get(A)
+    #     key_a, key_b, key_c = keys
+    #
+    #     # TODO: Replace with whichever encryptor makes the most sense.
+    #     encryptor = DoNothingEncryptor
+    #
+    #     # NOTE: This is just pseudocode. We might use a very different approach
+    #     exit_message = OnionMessage(
+    #         header="EXIT",
+    #         source=C,
+    #         destination=EXIT,
+    #         # TODO: the data between C and the Website needs to be encrypted!
+    #         data=data
+    #     )
+    #     message3 = OnionMessage(
+    #         header="RELAY",
+    #         source=B,
+    #         destination=C,
+    #         data=encryptor.encrypt(exit_message.to_json_string(), key_c)
+    #     )
+    #     message2 = OnionMessage(
+    #         header="RELAY",
+    #         source=A,
+    #         destination=B,
+    #         data=encryptor.encrypt(message3.to_json_string(), key_b)
+    #     )
+    #     message1 = OnionMessage(
+    #         header="RELAY",
+    #         source=ME,
+    #         destination=A,
+    #         data=encryptor.encrypt(message2.to_json_string(), key_a)
+    #     )
+    #     print("\nexit_message:", exit_message)
+    #     print("\nmessage3", message3)
+    #     print("\nmessage2", message2)
+    #     print("\nmessage1", message1)
+    #     return message1
 
 
