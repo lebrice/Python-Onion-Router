@@ -55,30 +55,42 @@ def new_control_packet(circID, command, data):
     else:
         print("ERROR    Invalid command. Commands for control packets are [create], [created], [destroy]")
 
-    return circID, json.dumps({'circID': circID,
-                       'command': command,
-                       'data': data
-                       })
+    return circID, json.dumps({
+        'circID': circID,
+        'command': command,
+        'data': data    # no need for encryption; only sends public modulus+exp
+        })
 
 
 # TODO: complete this header with additional Tor functionality e.g. multiple streams (if needed)
 #       if this feature is not added, merge this with create_control_packet method and add "relay" command
-def new_relay_packet(circID, command, data):
+def new_relay_packet(circID, command, ip, port, data):
     """
     build a packet (header + payload) according to its type
     circID: circuit ID. different for each connection between nodes.
 
     relay:      packet is to be forwarded by the node
-                -> additional header: checksum, length of payload
-                -> TODO: more stream commands
+                -> TODO additional header fields: checksum, length of payload, stream cmds
 
     valid commands:
         -> exch: packet contains symmetric key
-        -> extend: packet contains RSA key, forward to next node
+        -> extend: packet contains RSA key and next node's IP addr
+        -> extended: circuit was successfully extended
     """
-
-    return circID, json.dumps({'circID': circID,
-                       'relayFlag': True,
-                       'command': command,
-                       'data': data
-                       })
+    if command == "extend":
+        return circID, json.dumps({
+            'circID': circID,
+            'relayFlag': True,
+            'command': command,
+            'encrypt':[{
+                'ip': ip,
+                'port': port,
+                'data': data
+            }]})
+    else:
+        return circID, json.dumps({'circID': circID,
+                        'relayFlag': True,
+                        'command': command,
+                        'encrypt':[{
+                            'data': data
+                        }]})
