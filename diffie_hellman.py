@@ -48,7 +48,7 @@ class DiffieHellmanReceiver(Thread):
 
             while self.running:
                 client_socket, address = receiving_socket.accept()
-                print(f"got a connection from {address}")
+                # print(f"got a connection from {address}")
                 client_specific_thread = Thread(
                     target=get_and_store_keys(
                         client_socket,
@@ -78,7 +78,7 @@ def get_and_store_keys(client_socket, address, private_key, shared_secrets):
     given dict as a tuple (public_key, shared_secret).
     """
     public_key, secret = exchange_keys(client_socket, private_key)
-    print(f"public key: {public_key}, secret: {secret}")
+    # print(f"public key: {public_key}, secret: {secret}")
     shared_secrets[address] = (public_key, secret)
     client_socket.close()
 
@@ -96,11 +96,10 @@ def get_shared_secret(server_ip, server_receiving_port, private_key):
 def exchange_keys(exchange_socket, private_key):
     """ exchange public keys over the given socket. """
     my_number = compute_public_key(private_key)
-    print
     exchange_socket.send(key_to_bytes(my_number))
     server_key_in_bytes = exchange_socket.recv(MAX_PUBLIC_KEY_LENGTH_BYTES)
     server_public_key = key_from_bytes(server_key_in_bytes)
-    print(f"sent {my_number}, received {server_public_key}")
+    # print(f"sent {my_number}, received {server_public_key}")
     our_shared_secret = compute_shared_secret(private_key, server_public_key)
     return server_public_key, our_shared_secret
 

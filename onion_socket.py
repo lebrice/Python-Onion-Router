@@ -16,14 +16,24 @@ from messaging import *
 DEFAULT_PRIVATE_KEY = 164
 
 
+@contextmanager
+def socket(onion_node=None):
+    if onion_node is None:
+        onion_node = OnionNode("my_node", 12350)
+    onion_socket = OnionSocket(onion_node)
+    try:
+        yield onion_socket
+    finally:
+        onion_socket.close()
+
+
 class OnionSocket():
     def __init__(self, onion_node=None):
         # TODO: change this private key for each node.
-        self.my_private_key = DEFAULT_PRIVATE_KEY  # Some random value
         self.target_ip = None
         self.target_port = None
         if onion_node is None:
-            self.node = OnionNode("my_node", 12350, self.my_private_key)
+            self.node = OnionNode("my_node", 12350)
         else:
             self.node = onion_node
 
@@ -33,15 +43,10 @@ class OnionSocket():
             time.sleep(0.1)  # Thread.yield() equivalent, kindof
 
     @staticmethod
-    @contextmanager
     def socket(onion_node=None):
         if onion_node is None:
-            onion_node = OnionNode("my_node", 12350, DEFAULT_PRIVATE_KEY)
-        onion_socket = OnionSocket(onion_node)
-        try:
-            yield onion_socket
-        finally:
-            onion_socket.close()
+            onion_node = OnionNode("my_node", 12350)
+        return OnionSocket(onion_node)
 
     @property
     def connected(self):

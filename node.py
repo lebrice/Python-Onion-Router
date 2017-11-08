@@ -7,13 +7,13 @@ import threading
 import time
 import types
 
+from socket import SocketType
 from typing import List, Dict
 
-from queue import Empty
 from encryption import *
-from workers import *
-from queues import *
 from messaging import IpInfo
+from relaying import IntermediateRelay
+from workers import *
 import RSA
 import key_exchange_receiver as keyrec
 import key_exchange_sender as keysend
@@ -58,10 +58,9 @@ class OnionNode(threading.Thread, SimpleAdditionEncryptor):
                 # Wait for the next message to arrive.
                 try:
                     client_socket, address = receiving_socket.accept()
-                    #if message has format {'type': 'key_exchange_request'} for example, key exchange request
-                    self.process_message(message, client_socket)
-                    #TODO: do not close when key exchange is in process, socket is sent
-                    client_socket.close()
+                    # if message has format {'type': 'key_exchange_request'}
+                    # for example, key exchange request
+                    self.process_message(client_socket, message)
                 except socket.timeout:
                     continue
 
@@ -100,7 +99,7 @@ class OnionNode(threading.Thread, SimpleAdditionEncryptor):
         self.running = False
         self.join()
 
-    def process_message(self, message, socket):
+    def process_message(self, _socket: SocketType, message: OnionMessage):
         """
         TODO: main application logic.
         - Figure out what to do with a message: is it supposed to be forwarded
@@ -110,11 +109,37 @@ class OnionNode(threading.Thread, SimpleAdditionEncryptor):
         key_exchange = keyrec.KeyExchangeReceiver(socket, self.shared_secrets, self.rsa_keys)
         key_exchange.start()
         """
-        # if OnionMessage.is_meant_for_me(self, message):
-        #     # Do something
-        # else:
-        #     # Forward the message along.
-        pass
+        if message.header == "RELAY":
+            # NOTE: This might not be exactly how we get the destination.
+            # Nevertheless, this serves as an example of what we can do with
+            # the IntermediateRelay class from relaying.py.
+            new_socket = socket.create_connection(message.destination)
+            relay = IntermediateRelay(
+                _socket,
+                new_socket,
+                self.relay_forward_in_chain(),
+                self.relay_backward_in_chain()
+            )
+            relay.start()
+        # TODO: fill in the other cases.
+
+    def relay_forward_in_chain(self):
+        """returns a function that modifies messages before they are sent
+        forward in the chain.
+        """
+        def handle(message):
+            # TODO: this should be where we modify, encrypt, decrypt, etc.
+            return message
+        return handle
+
+    def relay_backward_in_chain(self):
+        """returns a function that modifies messages before they are sent
+        backward in the chain.
+        """
+        def handle(message):
+            # TODO: this should be where we modify, encrypt, decrypt, etc.
+            return message
+        return handle
 
     def perform_key_exchange_with(self, neighbour: IpInfo):
         """Perform a DH key-exchange with the given neighbour and return the shared key
@@ -139,15 +164,15 @@ class OnionNode(threading.Thread, SimpleAdditionEncryptor):
                 destination=MOM_IP
             )
 
-            print("OnionNode is writing a message:", message)
+            # print("OnionNode is writing a message:", message)
             _socket.sendall(message.to_bytes())
             response_bytes = _socket.recv(1024)
 
             response_str = str(response_bytes, encoding="utf-8")
             response = OnionMessage.from_json_string(response_str)
 
-            neighbours = convert_to_tuples(response.data)
-            print(f"OnionNode received list of neighbours back: {neighbours}")
+            neighbours = convert_to_ip_info(response.data)
+            # print(f"OnionNode received list of neighbours back: {neighbours}")
             return neighbours
 
     def send_message(self, message: OnionMessage):
@@ -157,41 +182,11 @@ class OnionNode(threading.Thread, SimpleAdditionEncryptor):
             _socket.sendall(message.to_bytes())
 
 
-def convert_to_tuples(list_of_lists):
+def convert_to_ip_info(list_of_lists):
     """ Helper method that converts a list of lists into a list of tuples. """
     tuples = []
-    for l in list_of_lists:
-        tuples.append(tuple(l))
-    return tuples
-
-            message = OnionMessage(
-                header="GET_NEIGHBOURS",
-                destination=MOM_IP
-            )
-
-            print("OnionNode is writing a message:", message)
-            _socket.sendall(message.to_bytes())
-            response_bytes = _socket.recv(1024)
-
-            response_str = str(response_bytes, encoding="utf-8")
-            response = OnionMessage.from_json_string(response_str)
-
-            neighbours = convert_to_tuples(response.data)
-            print(f"OnionNode received list of neighbours back: {neighbours}")
-            return neighbours
-
-    def send_message(self, message: OnionMessage):
-        target_ip, target_port = message.destination
-        with socket.socket() as _socket:
-            _socket.connect((target_ip, target_port))
-            _socket.sendall(message.to_bytes())
-
-
-def convert_to_tuples(list_of_lists):
-    """ Helper method that converts a list of lists into a list of tuples. """
-    tuples = []
-    for l in list_of_lists:
-        tuples.append(tuple(l))
+    for ip, port in list_of_lists:
+        tuples.append(IpInfo(ip, port))
     return tuples
 
 
@@ -218,14 +213,14 @@ class DirectoryNode(Thread, SimpleAdditionEncryptor):
             recv_socket.listen()
             while self.running:
                 # TODO: Implement this for real.
-                print("Directory Node is running.")
+                # print("Directory Node is running.")
                 try:
                     client_socket, client_address = recv_socket.accept()
                     with client_socket:  # Closes it automatically.
                         client_socket.settimeout(DEFAULT_TIMEOUT)
                         message_bytes = client_socket.recv(1024)
                         message_str = str(message_bytes, encoding='utf-8')
-                        print("Directory node received message:", message_str)
+                        # print("Directory node received message:", message_str)
 
                         if not OnionMessage.is_valid_string(message_str):
                             # TODO: Figure out what to do in such a case.
