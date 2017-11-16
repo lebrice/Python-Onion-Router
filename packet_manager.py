@@ -40,16 +40,22 @@ def new_control_packet(circID, command, data):
         usedCircIDs.append(circID)
 
     elif command == "created":
+        """
+        TODO: does this make sense? list is local
+        
         try:
             usedCircIDs.index(circID)
         except ValueError:
             print("ERROR    Received a created circuit control packet for a circuit that was not created")
+        """
 
     elif command == "destroy":
+        """
         try:
             usedCircIDs.remove(circID)
         except ValueError:
             print("ERROR    Circuit ID to be destroyed does not match any existing circuit IDs")
+        """
 
     else:
         print("ERROR    Invalid command. Commands for control packets are [create], [created], [destroy]")
@@ -57,13 +63,13 @@ def new_control_packet(circID, command, data):
     return circID, json.dumps({
         'circID': circID,
         'command': command,
-        'data': data    # no need for encryption; only sends public modulus+exp
+        'data': data
         })
 
 
 # TODO: complete this header with additional Tor functionality e.g. multiple streams (if needed)
 #       if this feature is not added, merge this with create_control_packet method and add "relay" command
-def new_relay_packet(circID, command, ip, port, data):
+def new_relay_packet(circID, command, encrypted_data):
     """
     build a packet (header + payload) according to its type
     circID: circuit ID. different for each connection between nodes.
@@ -76,22 +82,9 @@ def new_relay_packet(circID, command, ip, port, data):
         -> extend: packet contains RSA key and next node's IP addr
         -> extended: circuit was successfully extended
     """
-    if command == "extend":
-        return circID, json.dumps({
-            'circID': circID,
-            'relayFlag': True,
-            'command': command,
-            'encrypted':[{
-                'isDecrypted' : True,
-                'ip': ip,
-                'port': port,
-                'data': data
-            }]})
-    else:
-        return circID, json.dumps({'circID': circID,
+
+    return circID, json.dumps({
+                        'circID': circID,
                         'relayFlag': True,
                         'command': command,
-                        'encrypted':[{
-                            'isDecrypted' : True,
-                            'data': data
-                        }]})
+                        'encrypted_data': encrypted_data})
