@@ -12,7 +12,6 @@
 
     4.  Bob receives extend packet. generates new circuit ID (known only for B->C)
         -> control packet, cmd = create, with key from Alice for Carol
-    ??? how does Bob know Alice's address?
 
     5.  Carol receives control packet, takes key from Alice, responds with her half of d-h
         -> control packet, cmd = created

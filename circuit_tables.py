@@ -5,21 +5,21 @@ class circuit_table():
         format: ip:port | circID
     """
     def __init__(self):
-        table = {}
+        self.table = {}
 
     def add_circuit_entry(self, ip, port, circID):
-        index = format("{}:{}", ip, port)
+        index = "{}:{}".format(ip, port)
         self.table[index] = circID   # packet builder prevents duplicate circIDs from being created
 
     def remove_circuit_entry(self, ip, port):
-        index = format("{}:{}", ip, port)
+        index = "{}:{}".format(ip, port)
         try:
             del self.table[index]
         except LookupError:
             print("ERROR    No such IP address in the key table; could not remove entry")
 
     def get_circID(self, ip, port):
-        index = format("{}:{}", ip, port)
+        index = "{}:{}".format(ip, port)
         try:
             return self.table[index]
         except LookupError:
@@ -49,21 +49,21 @@ class sender_key_table():
     """
 
     def __init__(self):
-        table = {}
+        self.table = {}
 
     def add_key_entry(self, circID, nodeNo, symmkey):
-        index = format("{}:{}", circID, nodeNo)
+        index = "{}:{}".format(circID, nodeNo)
         self.table[index] = symmkey
 
     def remove_key_entry(self, circID, nodeNo):
-        index = format("{}:{}", circID, nodeNo)
+        index = "{}:{}".format(circID, nodeNo)
         try:
             del self.table[index]
         except LookupError:
             print("ERROR    No such node address in the key table; could not remove entry")
 
     def get_key(self, circID, nodeNo):
-        index = format("{}:{}", circID, nodeNo)
+        index = "{}:{}".format(circID, nodeNo)
         try:
             return self.table[index]
         except LookupError:
@@ -82,7 +82,7 @@ class node_key_table():
     """
 
     def __init__(self):
-        table = {}
+        self.table = {}
 
     def add_key_entry(self, fromID, symmkey):
         self.table[fromID] = symmkey
@@ -112,7 +112,7 @@ class node_relay_table():
     """
 
     def __init__(self):
-        table = {}
+        self.table = {}
 
     def add_relay_entry(self, fromID, toID):
         self.table[fromID] = toID
