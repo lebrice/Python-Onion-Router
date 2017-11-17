@@ -70,7 +70,7 @@ class OnionNode(threading.Thread, SimpleAdditionEncryptor):
                                                   self.node_key_table,
                                                   self.node_relay_table,
                                                   self.rsa_keys)
-                    client_thread.run()
+                    client_thread.start()
                 except socket.timeout:
                     continue
 
@@ -107,7 +107,7 @@ class OnionNode(threading.Thread, SimpleAdditionEncryptor):
     def stop(self):
         """ tells the node to shutdown. """
         self.running = False
-        self.join()
+        #self.join()
 
     def relay_forward_in_chain(self):
         """returns a function that modifies messages before they are sent
@@ -250,4 +250,4 @@ class DirectoryNode(Thread, SimpleAdditionEncryptor):
     def stop(self):
         """ tells the node to shutdown. """
         self.running = False
-        self.join()
+        #self.join()

@@ -40,6 +40,8 @@ class OnionSocket():
         self.circuit_table = ct.circuit_table()
         self.sender_key_table = ct.sender_key_table()
 
+        self._build_circuit()
+
         # # TODO: Need to initialize the node properly.
         # self.node.start()
         # while(self.node.initialized is not True):
@@ -94,7 +96,7 @@ class OnionSocket():
         nodes = [node1, node2, node3]
         rsa_keys = RSA.get_private_key_rsa()
         builder = scb.SenderCircuitBuilder(nodes, rsa_keys, self.circuit_table, self.sender_key_table)
-        builder.run()
+        builder.start()
 
 
 
