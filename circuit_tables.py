@@ -17,6 +17,7 @@ class circuit_table():
             del self.table[index]
         except LookupError:
             print("ERROR    No such IP address in the key table; could not remove entry")
+            return -1
 
     def get_circID(self, ip, port):
         index = "{}:{}".format(ip, port)
@@ -24,6 +25,7 @@ class circuit_table():
             return self.table[index]
         except LookupError:
             print("ERROR    No such IP address in the circuit table; could not return circuit ID")
+            return -1
 
     # needed for nodes that have both incoming and outgoing circIDs; better than maintaining two tables
     def get_address(self, circID):
@@ -31,6 +33,7 @@ class circuit_table():
             if self.table[k] == circID:
                 return k
         print("ERROR    No such circuit ID in the circuit table; could not return IP address")
+        return -1
 
     def print_table(self):
         for k in self.table.keys():
@@ -61,6 +64,7 @@ class sender_key_table():
             del self.table[index]
         except LookupError:
             print("ERROR    No such node address in the key table; could not remove entry")
+            return -1
 
     def get_key(self, circID, nodeNo):
         index = "{}:{}".format(circID, nodeNo)
@@ -68,6 +72,7 @@ class sender_key_table():
             return self.table[index]
         except LookupError:
             print("ERROR    No such node address in the key table; could not return key")
+            return -1
 
     def print_table(self):
         for k in self.table.keys():
@@ -92,12 +97,14 @@ class node_key_table():
             del self.table[fromID]
         except LookupError:
             print("ERROR    No such IP address in the key table; could not remove entry")
+            return -1
 
     def get_key(self, fromID):
         try:
             return self.table[fromID]
         except LookupError:
             print("ERROR    No such IP address in the key table; could not return key")
+            return -1
 
     def print_table(self):
         for k in self.table.keys():
@@ -121,13 +128,26 @@ class node_relay_table():
         try:
             del self.table[fromID]
         except LookupError:
-            print("ERROR    No such IP address in the key table; could not remove entry")
+            print("ERROR    No such circID in the key table; could not remove entry")
+            return -1
 
     def get_dest_id(self, fromID):
         try:
             return self.table[fromID]
         except LookupError:
-            print("ERROR    No such IP address in the key table; could not return key")
+            print("ERROR    No such circID in the key table; could not return key")
+            return -1
+
+    def get_from_id(self, destID):
+        for k in self.table.keys():
+            if self.table[k] == destID:
+                return k
+
+        print("ERROR    No such circID in the key table; could not return key")
+        return -1
+
+    def get_length(self):
+        return len(self.table)
 
     def print_table(self):
         for k in self.table.keys():

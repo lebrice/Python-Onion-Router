@@ -2,6 +2,7 @@ import socket
 from threading import Thread
 import json
 import random
+from random import randint
 import string
 from encryption import FernetEncryptor
 import RSA
@@ -47,6 +48,23 @@ class NodeSwitchboard(Thread):
     def _close(self):
         self.client_socket.close()
 
+    def _generate_new_circID(self):
+        # define a limit to how many circuits the node can be part of
+        max_circuit_no = 100
+
+        if self.node_relay_table.get_length() == max_circuit_no:
+            print("ERROR    Too many active circuits; could not create circuit. Current max is ", max_circuit_no)
+            print("         Try deleting a circuit before creating a new one")
+            return
+
+        # generate a circID that is not in use in the node_relay_table
+        while True:
+            circID = randint(0, 10000)
+            if self.node_relay_table.get_from_id(circID) == -1 and self.node_relay_table.get_dest_id(circID) == -1:
+                break
+
+        return circID
+
     def _process_message(self, json_object):
         """
         parses the packet that was received, and acts accordingly
@@ -54,8 +72,7 @@ class NodeSwitchboard(Thread):
 
         message = json.load(json_object)
 
-        if message['relayFlag'] == True:
-
+        if 'relayFlag' in message and message['relayFlag']:
                 # message is a relay message; try decrypting the payload
                 key = self.node_key_table.get_key(message['circID'])
                 decrypted_payload = FernetEncryptor.decrypt(message['encrypted_data'], key)
@@ -64,8 +81,10 @@ class NodeSwitchboard(Thread):
                     if message['command'] == "extend":
                         # message has extend command and managed to decrypt it
                         # -> create a new control packet cmd=create, send to next node
-                        destID, pkt = pm.new_control_packet(0, "create", decrypted_payload['data'])
+                        destID = self._generate_new_circID()
                         self.node_relay_table.add_relay_entry(message['circID'], destID)
+
+                        pkt = pm.new_control_packet(destID, "create", decrypted_payload['data'])
                         self._send(pkt, decrypted_payload['ip'], decrypted_payload['port'])
                     elif message['command'] == "extended":
                         #TODO
@@ -86,11 +105,8 @@ class NodeSwitchboard(Thread):
 
                     self._send(message, ip, port)
 
-
-        else:
+        elif 'relayFlag' in message and not message['relayFlag']:
             # received message is a control message
-            # TODO: add relay flag == false, or deal without it?
-
             if message['command'] == "create":
                 # received half of a RSA key exchange
                 # -> create association with sender in table, deal with keys, send back a "created" packet
@@ -98,7 +114,7 @@ class NodeSwitchboard(Thread):
                 try:
                     cipher_shared_key = int(cipher_shared_key)
                 except ValueError:
-                    print("ERROR    Could not interpret cipher shared key")
+                    print("ERROR    Could not interpret cipher shared key\n")
                     self._close()
                     return
                 shared_key = RSA.decrypt_RSA(cipher_shared_key, self.rsa_keys['private'], self.rsa_keys['modulus'])
@@ -120,4 +136,6 @@ class NodeSwitchboard(Thread):
                 # destroy association to sender, then forward node
                 # TODO: implement this
                 return
-
+        else:
+            print("ERROR    Received message has invalid format\n")
+            return

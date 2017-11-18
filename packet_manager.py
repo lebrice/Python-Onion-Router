@@ -1,9 +1,4 @@
 import json
-from random import randint
-
-# keep track of used circuit IDs locally, preventing the reuse of circuit IDs
-# faster than indexing into table; circID is added later
-usedCircIDs = [ ]
 
 # TODO: padding for fixed packet length
 def new_control_packet(circID, command, data):
@@ -16,54 +11,22 @@ def new_control_packet(circID, command, data):
         -> created  : new circuit has been created
         -> destroy  : destroy a circuit
 
+        -> dir_query  : query directory node for a list of all nodes in onion network
+        -> dir_update : update a node's public RSA key information
+
     """
-
-    if command == "create":
-        minID = 10
-        maxID = 99
-
-        if len(usedCircIDs) > maxID - minID:
-            print("ERROR    Too many active circuits; could not create circuit. Current max is ", maxID - minID + 1)
-            print("         Try deleting a circuit before creating a new one")
-            return
-
-        circID = randint(minID, maxID)
-        while True:
-            try:
-                usedCircIDs.index(circID)
-            except ValueError:
-                break
-
-            # ID is taken somewhere along the line -> generate new one
-            circID = randint(minID, maxID)
-
-        usedCircIDs.append(circID)
-
-    elif command == "created":
-        """
-        TODO: does this make sense? list is local
-        
-        try:
-            usedCircIDs.index(circID)
-        except ValueError:
-            print("ERROR    Received a created circuit control packet for a circuit that was not created")
-        """
-
-    elif command == "destroy":
-        """
-        try:
-            usedCircIDs.remove(circID)
-        except ValueError:
-            print("ERROR    Circuit ID to be destroyed does not match any existing circuit IDs")
-        """
-
-    else:
-        print("ERROR    Invalid command. Commands for control packets are [create], [created], [destroy]")
-
-    return circID, json.dumps({
-        'circID': circID,
-        'command': command,
-        'data': data
+    if command == "create" or command == "created" or command == "destroy":
+        return json.dumps({
+            'circID': circID,
+            'relayFlag': False,
+            'command': command,
+            'data': data
+        })
+    elif command == "dir_query" or command == "dir_update":
+        return json.dumps({
+            'command' : command,
+            'public_exp' : data["public"],
+            'modulus' : data["modulus"]
         })
 
 
@@ -78,13 +41,13 @@ def new_relay_packet(circID, command, encrypted_data):
                 -> TODO additional header fields: checksum, length of payload, stream cmds
 
     valid commands:
-        -> exch: packet contains symmetric key
         -> extend: packet contains RSA key and next node's IP addr
         -> extended: circuit was successfully extended
     """
 
-    return circID, json.dumps({
-                        'circID': circID,
-                        'relayFlag': True,
-                        'command': command,
-                        'encrypted_data': encrypted_data})
+    return json.dumps({
+            'circID': circID,
+            'relayFlag': True,
+            'command': command,
+            'encrypted_data': encrypted_data
+    })
