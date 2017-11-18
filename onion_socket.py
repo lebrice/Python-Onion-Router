@@ -47,8 +47,6 @@ class OnionSocket():
         # while(self.node.initialized is not True):
         #     time.sleep(0.1)  # Thread.yield() equivalent, kindof
 
-
-
     @staticmethod
     def socket(onion_node=None):
         if onion_node is None:
@@ -97,6 +95,7 @@ class OnionSocket():
         rsa_keys = RSA.get_private_key_rsa()
         builder = scb.SenderCircuitBuilder(nodes, rsa_keys, self.circuit_table, self.sender_key_table)
         builder.start()
+        builder.join()
 
 
 
