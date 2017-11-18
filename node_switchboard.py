@@ -7,7 +7,7 @@ from encryption import FernetEncryptor
 import RSA
 import packet_manager as pm
 
-class NodeSocket(Thread):
+class NodeSwitchboard(Thread):
 
     """
     class that is created when a node (node.py) accepts a connection from a socket.
