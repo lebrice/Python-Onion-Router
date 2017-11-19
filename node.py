@@ -160,7 +160,7 @@ class DirectoryNode(Thread):
 
         the directory node can do the following:
             - answer:  sends the network_info.json file to client
-            - update:   updates the client's information
+            - update:  updates the client's information
     """
 
     def __init__(self, ip, port):
@@ -174,19 +174,13 @@ class DirectoryNode(Thread):
 
     def create_json(self):
         # create the network file if it doesn't exist,
-        # and add directory node's info to it
         try:
             f = open('network_list.json', 'x')
         except FileExistsError:
             f = open('network_list.json', 'w')
             f.seek(0)
 
-        new = {'nodes in network': [{
-            'ip': self.ip,
-            'port': self.port,
-            'public_exp': 0,
-            'modulus': 0
-        }]}
+        new = {'nodes in network': []}
         json.dump(new, f)
         f.close()
 
@@ -200,11 +194,14 @@ class DirectoryNode(Thread):
 
         # if a node is already in the list, then it is trying to update its RSA info
         updated = 0
-        for n in data['nodes in network']:
-            if n['ip'] == ip and n['port'] == port:
-                n['public_exp'] = public_exp
-                n['modulus'] = modulus
-                updated = 1
+        test = len(data['nodes in network'])
+
+        if len(data['nodes in network']) > 0:
+            for n in data['nodes in network']:
+                if n['ip'] == ip and n['port'] == port:
+                    n['public_exp'] = public_exp
+                    n['modulus'] = modulus
+                    updated = 1
 
         # node is new: add it to network file
         if updated == 0:
