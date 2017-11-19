@@ -8,6 +8,8 @@ import encryption as enc
 import packet_manager as pm
 import get_request as gr
 
+BUFFER_SIZE = 4096
+
 class NodeSwitchboard(Thread):
 
     """
@@ -29,13 +31,13 @@ class NodeSwitchboard(Thread):
         super().__init__()
         self.client_socket = client_socket
         self.addr = addr
-        self.circuit_table = circuit_table()
-        self.node_key_table = node_key_table()
-        self.node_relay_table = node_relay_table()
+        self.circuit_table = circuit_table
+        self.node_key_table = node_key_table
+        self.node_relay_table = node_relay_table
         self.rsa_keys = rsa_keys
 
     def run(self):
-        message_bytes = self.client_socket.recv()
+        message_bytes = self.client_socket.recv(BUFFER_SIZE)
         message_json = message_bytes.decode('utf-8')
         self._process_message(message_json)
 
