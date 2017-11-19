@@ -11,11 +11,9 @@ import socket
 import json
 import time
 import packet_manager as pm
-from encryption import FernetEncryptor
 
-import sender_circuit_builder as scb
 import circuit_tables as ct
-import RSA
+import encryption as enc
 
 BUFFER_SIZE = 1024 # Constant for now
 DEFAULT_TIMEOUT = 1
@@ -55,6 +53,8 @@ class OnionClient(Thread):
                     # Wait for the next message to arrive.
                     try:
                         client_socket, address = receiving_socket.accept()
+
+                        # TODO check received packet and remove layers here
                         # client_thread = ns.NodeSwitchboard(client_socket, address,
                         #                                    self.circuit_table,
                         #                                    self.node_key_table,
@@ -161,8 +161,8 @@ class OnionClient(Thread):
         self._create(nodes[0]['ip'], nodes[0]['port'])
 
         for i in range(0, len(nodes)):
-            k = FernetEncryptor.generate_key()
-            ciphered_shared_key = RSA.encrypt_RSA(k, nodes[i]['public_exp'], nodes[i]['modulus'])
+            k = enc.generate_fernet_key()
+            ciphered_shared_key = enc.encrypt_RSA(k, nodes[i]['public_exp'], nodes[i]['modulus'])
 
             if i == 0:
                 # first link is special: only one to get control "create" packet
@@ -179,7 +179,7 @@ class OnionClient(Thread):
                 # e.g. for node 2, apply layer 1 then layer 0
                 for j in range(i - 1, -1, -1):
                     layer = self.sender_key_table.get_key(destID, j)
-                    encrypted_data = FernetEncryptor.encrypt(encrypted_data, layer)
+                    encrypted_data = enc.encrypt_fernet(encrypted_data, layer)
 
                 pkt = pm.new_relay_packet(destID, "extend", encrypted_data)
 

@@ -4,8 +4,7 @@ import json
 import random
 from random import randint
 import string
-from encryption import FernetEncryptor
-import RSA
+import encryption as enc
 import packet_manager as pm
 import get_request as gr
 
@@ -71,6 +70,7 @@ class NodeSwitchboard(Thread):
         parses the packet that was received, and acts accordingly
         """
 
+        print("received packet\n")
         message = json.loads(json_object)
         if 'type' in message and message['type'] == "relay":
             self._process_relay(message)
@@ -85,7 +85,7 @@ class NodeSwitchboard(Thread):
         # message is going forwards,  decrypt one layer
         if message['command'] == "extend" or message['command'] == "relay_data":
             key = self.node_key_table.get_key(message['circID'])
-            decrypted_payload = FernetEncryptor.decrypt(message['encrypted_data'], key)
+            decrypted_payload = enc.decrypt_fernet(message['encrypted_data'], key)
 
             if 'isDecrypted' in decrypted_payload:
                 if message['command'] == "extend":
@@ -109,7 +109,7 @@ class NodeSwitchboard(Thread):
 
                     # TODO: place address of website here
                     payload = pm.new_relay_payload(0, 0, ans)
-                    encrypted_payload = FernetEncryptor.encrypt(payload, key)
+                    encrypted_payload = enc.encrypt_fernet(payload, key)
 
                     pkt = pm.new_relay_packet(message['circID'], "relay_ans", encrypted_payload)
                     ip, port = self.circuit_table.get_address(message['circID']).split(':')
@@ -130,7 +130,7 @@ class NodeSwitchboard(Thread):
             # if A -> B and message was received from B and goes backwards, send it to A
             fromID = self.node_relay_table.get_from_id(message['circID'])
             key = self.node_key_table.get_key(fromID)
-            encrypted_payload = FernetEncryptor.encrypt(message['encrypted_data'], key)
+            encrypted_payload = enc.encrypt_fernet(message['encrypted_data'], key)
 
             pkt = pm.new_relay_packet(fromID, message['command'], encrypted_payload)
             ip, port = self.circuit_table.get_address(fromID).split(':')
@@ -148,7 +148,7 @@ class NodeSwitchboard(Thread):
                 print("ERROR    Could not interpret cipher shared key\n")
                 self._close()
                 return
-            shared_key = RSA.decrypt_RSA(cipher_shared_key, self.rsa_keys['private'], self.rsa_keys['modulus'])
+            shared_key = enc.decrypt_RSA(cipher_shared_key, self.rsa_keys['private'], self.rsa_keys['modulus'])
 
             ip, port = self.addr.split(':')
             self.circuit_table.add_circuit_entry(ip, port, message['circID'])
@@ -165,7 +165,7 @@ class NodeSwitchboard(Thread):
             # -> wrap payload in "extended" packet, send it backwards
             fromID = self.node_relay_table.get_from_id(message['circID'])
             key = self.node_key_table.get_key(fromID)
-            encrypted_payload = FernetEncryptor.encrypt(message['data'], key)
+            encrypted_payload = enc.encrypt_fernet(message['data'], key)
 
             pkt = pm.new_relay_packet(fromID, "extended", encrypted_payload)
             ip, port = self.circuit_table.get_address(fromID).split(':')

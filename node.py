@@ -11,12 +11,11 @@ import types
 from socket import SocketType
 from typing import List, Dict
 
-from encryption import *
 from messaging import IpInfo
 import circuit_tables as ct
 from relaying import IntermediateRelay
 from workers import *
-import RSA
+import encryption as enc
 import node_switchboard as ns
 import packet_manager as pm
 
@@ -34,7 +33,7 @@ class OnionNode(threading.Thread):
         self.network_list = {}
 
         # Create a public key, private key and modulus for key exchange
-        self.rsa_keys = RSA.get_private_key_rsa()
+        self.rsa_keys = enc.get_private_key_rsa()
 
         self.circuit_table = ct.circuit_table()
         self.node_key_table = ct.node_key_table()
