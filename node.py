@@ -20,20 +20,16 @@ import RSA
 import node_switchboard as ns
 import packet_manager as pm
 
-DIRECTORY_IP = "127.0.0.1"
-DIRECTORY_PORT = "12345"
-
 DEFAULT_TIMEOUT = 1  # timeout value for all blocking socket operations.
 
 
 class OnionNode(threading.Thread):
     """A Node in the onion-routing network"""
 
-    def __init__(self, name, receiving_port):
+    def __init__(self, ip, port):
         super().__init__()
-        self._name = name
-        self.ip_address = socket.gethostname()
-        self.receiving_port = receiving_port
+        self.ip = ip
+        self.port = port
 
         self.network_list = {}
 
@@ -54,27 +50,32 @@ class OnionNode(threading.Thread):
         with the onion routing network
         """
         self.running = True
-        self._contact_dir_node()
+
+        if self.initialized:
+            with socket.socket() as receiving_socket:
+                receiving_socket.settimeout(DEFAULT_TIMEOUT)
+                receiving_socket.bind((self.ip, self.port))
+                receiving_socket.listen()
+                while self.running:
+                    # Wait for the next message to arrive.
+                    try:
+                        client_socket, address = receiving_socket.accept()
+                        client_thread = ns.NodeSwitchboard(client_socket, address,
+                                                           self.circuit_table,
+                                                           self.node_key_table,
+                                                           self.node_relay_table,
+                                                           self.rsa_keys)
+                        client_thread.start()
+                    except socket.timeout:
+                        continue
+        else:
+            print("ERROR    Node not initialized. Call node.connect() first")
+
+    def connect(self, dir_ip, dir_port):
+        self._contact_dir_node(dir_ip, dir_port)
         self.initialized = True
 
-        with socket.socket() as receiving_socket:
-            receiving_socket.settimeout(DEFAULT_TIMEOUT)
-            receiving_socket.bind((self.ip_address, self.receiving_port))
-            receiving_socket.listen()
-            while self.running:
-                # Wait for the next message to arrive.
-                try:
-                    client_socket, address = receiving_socket.accept()
-                    client_thread = ns.NodeSwitchboard(client_socket, address,
-                                                       self.circuit_table,
-                                                       self.node_key_table,
-                                                       self.node_relay_table,
-                                                       self.rsa_keys)
-                    client_thread.start()
-                except socket.timeout:
-                    continue
-
-    def _contact_dir_node(self):
+    def _contact_dir_node(self, dir_ip, dir_port):
         """
             make the node known to the directory node
             contact directory node with a dir_update packet
@@ -86,7 +87,7 @@ class OnionNode(threading.Thread):
         """
 
         pkt = pm.new_dir_packet("dir_update", 0, self.rsa_keys)
-        self._create(DIRECTORY_IP, DIRECTORY_PORT)
+        self._create(dir_ip, dir_port)
         self._send(pkt)
 
         # wait for a response packet; 3 tries
@@ -198,11 +199,10 @@ class DirectoryNode(Thread):
             - update:   updates the client's information
     """
 
-    def __init__(self, receiving_port=12345):
+    def __init__(self, ip, port):
         super().__init__()
-        self._host = socket.gethostname()
-        self._receiving_port = receiving_port
-        self.ip_info = IpInfo(self._host, self._receiving_port)
+        self.ip = ip
+        self.port = port
         self._running_flag = False
         self._running_lock = Lock()
 
@@ -210,8 +210,8 @@ class DirectoryNode(Thread):
         # create the network file, add directory node's info to it
         f = open('network_list.json', 'x')
         new = {'nodes in network': [{
-            'ip': DIRECTORY_IP,
-            'port': DIRECTORY_PORT,
+            'ip': self.ip,
+            'port': self.port,
             'public_exp': 0,
             'modulus': 0
         }]}
@@ -267,7 +267,7 @@ class DirectoryNode(Thread):
 
         with socket.socket() as recv_socket:
             recv_socket.settimeout(DEFAULT_TIMEOUT)
-            recv_socket.bind((self._host, self._receiving_port))
+            recv_socket.bind((self.ip, self.port))
             recv_socket.listen()
             while self.running:
                 try:

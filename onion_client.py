@@ -17,8 +17,6 @@ import RSA
 
 BUFFER_SIZE = 1024 # Constant for now
 DEFAULT_TIMEOUT = 1
-DIRECTORY_IP = "127.0.0.1"
-DIRECTORY_PORT = "12345"
 
 class OnionClient():
     def __init__(self, number_of_nodes):
@@ -29,13 +27,13 @@ class OnionClient():
         self.sender_key_table = ct.sender_key_table()
         self.network_list = {}
 
-    def connect(self):
+    def connect(self, dir_ip, dir_port):
         """
             called from exterior to tell client to prepare for transmission
             - fetch network list
             - build circuit
         """
-        self._contact_dir_node()
+        self._contact_dir_node(dir_ip, dir_port)
         self._build_circuit()
         self.initialized = True
 
@@ -47,13 +45,15 @@ class OnionClient():
             print("ERROR     Client not initialized. Call OnionClient.connect() first.\n")
             return
 
+        print("You tried to send a message\n")
+
 
     def recv(self, buffer_size):
         """ Receives the given number of bytes from the Onion socket.
         """
         raise NotImplementedError()
 
-    def _contact_dir_node(self):
+    def _contact_dir_node(self, dir_ip, dir_port):
         """
             query dir node for network list, without including the client in the list of nodes
             this avoids the problem of the client using itself as a node later on
@@ -61,7 +61,7 @@ class OnionClient():
         """
 
         pkt = pm.new_dir_packet("dir_query", 0, 0)
-        self._create(DIRECTORY_IP, DIRECTORY_PORT)
+        self._create(dir_ip, dir_port)
         self._send(pkt)
 
         # wait for a response packet; 3 tries
