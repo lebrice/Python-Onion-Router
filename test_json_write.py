@@ -42,5 +42,4 @@ for n in data['nodes in network']:
 random_entry = random.sample(data['nodes in network'], 1)
 
 with open('test.json', 'w') as f:
-    json.dump(data, f)
-    f.close()
+    json.dump(data, f, indent=4)
