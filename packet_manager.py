@@ -1,6 +1,9 @@
 import json
 
-# TODO: padding for fixed packet length
+####################################### #
+# TODO: padding for fixed packet length #
+#########################################
+
 def new_control_packet(circID, command, data):
     """
     build a packet (header + payload) according to its type
@@ -11,22 +14,38 @@ def new_control_packet(circID, command, data):
         -> created  : new circuit has been created
         -> destroy  : destroy a circuit
 
-        -> dir_query  : query directory node for a list of all nodes in onion network
-        -> dir_update : update a node's public RSA key information
+    """
+    return json.dumps({
+        'circID': circID,
+        'relayFlag': False,
+        'command': command,
+        'data': data
+    })
+
+
+def new_dir_packet(command, updated, data):
+    """
+    packets used to contact directory node
+    don't need to be encrypted, as all information here is safe
+
+        -> dir_query  : node queries directory for a list of all nodes in onion network
+        -> dir_answer : dir node sends all connected nodes back to node
+                        if node was already in directory, update its rsa_keys
 
     """
-    if command == "create" or command == "created" or command == "destroy":
-        return json.dumps({
-            'circID': circID,
-            'relayFlag': False,
-            'command': command,
-            'data': data
-        })
-    elif command == "dir_query" or command == "dir_update":
+    if command == "dir_query":
         return json.dumps({
             'command' : command,
+            'relayFlag' : False,
             'public_exp' : data["public"],
             'modulus' : data["modulus"]
+        })
+    elif command == "dir_answer":
+        return json.dumps({
+            'command' : command,
+            'relayFlag' : False,
+            'updated' : updated,
+            'table' : data
         })
 
 
@@ -34,8 +53,6 @@ def new_control_packet(circID, command, data):
 #       if this feature is not added, merge this with create_control_packet method and add "relay" command
 def new_relay_packet(circID, command, encrypted_data):
     """
-    build a packet (header + payload) according to its type
-    circID: circuit ID. different for each connection between nodes.
 
     relay:      packet is to be forwarded by the node
                 -> TODO additional header fields: checksum, length of payload, stream cmds
