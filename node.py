@@ -35,8 +35,7 @@ class OnionNode(threading.Thread):
         self.ip_address = socket.gethostname()
         self.receiving_port = receiving_port
 
-        self.network_onion_nodes = {}
-        #self.neighbours: List[IpInfo] = []
+        self.network_list = {}
 
         # Create a public key, private key and modulus for key exchange
         self.rsa_keys = RSA.get_private_key_rsa()
@@ -85,7 +84,6 @@ class OnionNode(threading.Thread):
             dir node answers with a list of all nodes in onion network
 
         """
-        # self.neighbours = self.get_neighbouring_nodes_addresses()
 
         pkt = pm.new_dir_packet("dir_query", 0, self.rsa_keys)
         self._create(DIRECTORY_IP, DIRECTORY_PORT)
@@ -108,11 +106,11 @@ class OnionNode(threading.Thread):
 
         message = json.load(rec_bytes.decode())
 
-        if not message['dir_update']:
+        if message['type'] != "dir":
             print("ERROR    Unexpected answer from directory")
             self._close()
 
-        self.network_onion_nodes = message['table']
+        self.network_list = message['table']
 
     @property
     def running(self):
@@ -195,8 +193,8 @@ class DirectoryNode(Thread):
             - ip address : receiving port
             - public rsa key pair (e, n) = (public exp, modulus) to be used for key exchange
 
-        the directory node can take the following queries from nodes:
-            - request:  sends the network_info.json file to client
+        the directory node can do the following:
+            - answer:  sends the network_info.json file to client
             - update:   updates the client's information
     """
 
@@ -279,7 +277,7 @@ class DirectoryNode(Thread):
                         rec_bytes = client_socket.recv(1024)
                         message = json.load(rec_bytes.decode())
 
-                        if not message['command'] == "dir_query":
+                        if message['type'] != "dir":
                             # invalid message, ignore
                             client_socket.close()
                             continue

@@ -16,8 +16,8 @@ def new_control_packet(circID, command, data):
 
     """
     return json.dumps({
+        'type' : "control",
         'circID': circID,
-        'relayFlag': False,
         'command': command,
         'data': data
     })
@@ -35,19 +35,18 @@ def new_dir_packet(command, updated, data):
     """
     if command == "dir_query":
         return json.dumps({
+            'type' : "dir",
             'command' : command,
-            'relayFlag' : False,
             'public_exp' : data["public"],
             'modulus' : data["modulus"]
         })
     elif command == "dir_answer":
         return json.dumps({
+            'type' : "dir",
             'command' : command,
-            'relayFlag' : False,
             'updated' : updated,
             'table' : data
         })
-
 
 # TODO: complete this header with additional Tor functionality e.g. multiple streams (if needed)
 #       if this feature is not added, merge this with create_control_packet method and add "relay" command
@@ -60,11 +59,26 @@ def new_relay_packet(circID, command, encrypted_data):
     valid commands:
         -> extend: packet contains RSA key and next node's IP addr
         -> extended: circuit was successfully extended
+        -> relay_data : packet contains forward message (client -> server)
+        -> relay_ans :  packet message contains backward message (server -> client)
     """
 
     return json.dumps({
+            'type' : "relay",
             'circID': circID,
-            'relayFlag': True,
             'command': command,
             'encrypted_data': encrypted_data
     })
+
+
+def new_relay_payload(ip, port, data):
+    """
+    list used for relay packet payload
+    contains the part of the relay packet that needs to be encrypted
+    """
+
+    return {'isDecrypted': True,
+            'ip': ip,
+            'port': port,
+            'data': data
+    }
