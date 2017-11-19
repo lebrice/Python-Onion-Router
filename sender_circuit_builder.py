@@ -8,7 +8,6 @@ from random import randint
 
 BUFFER_SIZE = 1024 # Constant for now
 DEFAULT_TIMEOUT = 1
-NUMBER_OF_NODES = 3
 
 class SenderCircuitBuilder(Thread):
 
@@ -56,7 +55,7 @@ class SenderCircuitBuilder(Thread):
         # will always send the packet through the first node to reach the others
         self._create(self.nodes[0]['ip'], self.nodes[0]['port'])
 
-        for i in range(0, NUMBER_OF_NODES):
+        for i in range(0, len(self.nodes)):
             k = FernetEncryptor.generate_key()
             ciphered_shared_key = RSA.encrypt_RSA(k, self.nodes[i]['public_exp'], self.nodes[i]['modulus'])
 

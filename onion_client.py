@@ -17,13 +17,13 @@ import RSA
 
 BUFFER_SIZE = 1024 # Constant for now
 DEFAULT_TIMEOUT = 1
-NUMBER_OF_NODES = 3
 DIRECTORY_IP = "127.0.0.1"
 DIRECTORY_PORT = "12345"
 
 class OnionClient():
-    def __init__(self, onion_node=None):
+    def __init__(self, number_of_nodes):
         self.initialized = False
+        self.number_of_nodes = number_of_nodes
 
         self.circuit_table = ct.circuit_table()
         self.sender_key_table = ct.sender_key_table()
@@ -88,17 +88,17 @@ class OnionClient():
         self.network_list = message['table']
 
 
-    def _select_three_random_neighbours(self):
-        if len(self.network_list) < 3:
-            message = "There are currently not enough nodes for an onion" + \
-                "network to exist. (current: {len(self.node.neighbours)}<3)"
-            raise OnionNetworkError(message)
-        return random.sample(self.network_list['nodes in network'], 3)
+    def _select_random_nodes(self):
+        if len(self.network_list) < self.number_of_nodes:
+            print("ERROR    There are not enough nodes to build the circuit. Current: ",
+                  len(self.network_list), "requested", self.number_of_nodes)
+            return
+
+        return random.sample(self.network_list['nodes in network'], self.number_of_nodes)
 
 
     def _build_circuit(self):
-        node1, node2, node3 = self._select_three_random_neighbours()
-        nodes = [node1, node2, node3]
+        nodes = self._select_random_nodes()
         builder = scb.SenderCircuitBuilder(nodes, self.circuit_table, self.sender_key_table)
         builder.start()
         builder.join()
