@@ -33,6 +33,7 @@ if __name__ == "__main__":
 
     client = oc.OnionClient('127.0.0.1', 54321, args.node_count)
     client.connect(dir_ip, dir_port)
+    client.start()
     client.send("hello")
 
     # print("Request for {}".format(args.url))

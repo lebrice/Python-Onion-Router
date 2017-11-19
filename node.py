@@ -111,6 +111,7 @@ class OnionNode(threading.Thread):
         if message['type'] != "dir":
             print("ERROR    Unexpected answer from directory")
             self._close()
+            return
 
         self.network_list = message['table']
         self._close()
@@ -131,44 +132,6 @@ class OnionNode(threading.Thread):
         self.running = False
         #self.join()
 
-    # def relay_forward_in_chain(self):
-    #     """returns a function that modifies messages before they are sent
-    #     forward in the chain.
-    #     """
-    #     def handle(message):
-    #         # TODO: this should be where we modify, encrypt, decrypt, etc.
-    #         return message
-    #     return handle
-    #
-    # def relay_backward_in_chain(self):
-    #     """returns a function that modifies messages before they are sent
-    #     backward in the chain.
-    #     """
-    #     def handle(message):
-    #         # TODO: this should be where we modify, encrypt, decrypt, etc.
-    #         return message
-    #     return handle
-
-    # def get_neighbouring_nodes_addresses(self) -> List[IpInfo]:
-    #     with socket.socket() as _socket:
-    #         _socket.settimeout(DEFAULT_TIMEOUT)
-    #         _socket.connect((DIRECTORY_IP, DIRECTORY_PORT))
-    #
-    #         message = OnionMessage(
-    #             header="GET_NEIGHBOURS",
-    #             destination=DIRECTORY_IP
-    #         )
-    #
-    #         # print("OnionNode is writing a message:", message)
-    #         _socket.sendall(message.to_bytes())
-    #         response_bytes = _socket.recv(1024)
-    #
-    #         response_str = str(response_bytes, encoding="utf-8")
-    #         response = OnionMessage.from_json_string(response_str)
-    #
-    #         neighbours = convert_to_ip_info(response.data)
-    #         # print(f"OnionNode received list of neighbours back: {neighbours}")
-    #         return neighbours
 
     def _create(self, ip, port):
         self.client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)

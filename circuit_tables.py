@@ -35,6 +35,9 @@ class circuit_table():
         print("ERROR    No such circuit ID in the circuit table; could not return IP address")
         return -1
 
+    def get_length(self):
+        return len(self.table)
+
     def print_table(self):
         for k in self.table.keys():
             print(self.table[k])

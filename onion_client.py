@@ -4,6 +4,7 @@
     through the onion routing network
 """
 from contextlib import contextmanager
+from threading import Thread
 import random
 from random import randint
 import socket
@@ -19,8 +20,9 @@ import RSA
 BUFFER_SIZE = 1024 # Constant for now
 DEFAULT_TIMEOUT = 1
 
-class OnionClient():
+class OnionClient(Thread):
     def __init__(self, ip, port, number_of_nodes):
+        super().__init__()
         self.initialized = False
         self.ip = ip
         self.port = port
@@ -39,6 +41,33 @@ class OnionClient():
         self._contact_dir_node(dir_ip, dir_port)
         self._build_circuit()
         self.initialized = True
+        self.running = False
+
+    def run(self):
+        self.running = True
+
+        if self.initialized:
+            with socket.socket() as receiving_socket:
+                receiving_socket.settimeout(DEFAULT_TIMEOUT)
+                receiving_socket.bind((self.ip, self.port))
+                receiving_socket.listen()
+                while self.running:
+                    # Wait for the next message to arrive.
+                    try:
+                        client_socket, address = receiving_socket.accept()
+                        # client_thread = ns.NodeSwitchboard(client_socket, address,
+                        #                                    self.circuit_table,
+                        #                                    self.node_key_table,
+                        #                                    self.node_relay_table,
+                        #                                    self.rsa_keys)
+                        # client_thread.start()
+                    except socket.timeout:
+                        continue
+        else:
+            print("ERROR    Node not initialized. Call node.connect() first")
+
+    def stop(self):
+        self.running = False
 
     def send(self, data):
         """
@@ -64,15 +93,36 @@ class OnionClient():
         """
 
         pkt = pm.new_dir_packet("dir_query", 0, 0)
-        self._send(dir_ip, dir_port, pkt)
-        message = self._receive()
+        self._create(dir_ip, dir_port)
+        self._send(pkt)
+        #message = self._receive()
 
-        if message['type'] != "dir":
+        # wait for a response packet; 3 tries
+        tries = 3
+        rec_bytes = 0
+        while tries != 0:
+            try:
+                rec_bytes = self.client_socket.recv(BUFFER_SIZE)
+                break
+            except socket.timeout:
+                tries -= 1
+                if tries == 0:
+                    print("ERROR    Timeout while waiting for confirmation packet [3 tries]\n")
+                    print("         Directory connection exiting. . .")
+                    self._close()
+                    return
+                continue
+
+        message = json.loads(rec_bytes.decode())
+
+        if message == -1 or message['type'] != "dir":
             print("ERROR    Unexpected answer from directory\n")
             # invalid message, ignore
+            self._close()
             return
 
         self.network_list = message['table']
+        self._close()
 
 
     def _select_random_nodes(self):
@@ -105,6 +155,9 @@ class OnionClient():
     def _build_circuit(self):
         nodes = self._select_random_nodes()
 
+        # will always send the packet through the first node to reach the others
+        self._create(nodes[0]['ip'], nodes[0]['port'])
+
         for i in range(0, len(nodes)):
             k = FernetEncryptor.generate_key()
             ciphered_shared_key = RSA.encrypt_RSA(k, nodes[i]['public_exp'], nodes[i]['modulus'])
@@ -129,8 +182,8 @@ class OnionClient():
                 pkt = pm.new_relay_packet(destID, "extend", encrypted_data)
 
             # send first half of key exchange
-            # will always send the packet through the first node to reach the others
-            self._send(nodes[0]['ip'], nodes[0]['port'], pkt)
+
+            self._send(pkt)
             message = self._receive()
 
             if message['command'] != "created" or message['command'] != "extended" or 'command' not in message:
@@ -150,11 +203,15 @@ class OnionClient():
 
 
 
-    def _send(self, ip, port, message_str):
+    def _create(self, ip, port):
         self.client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.client_socket.connect((ip, port))
+
+    def _send(self, message_str):
         message_bytes = message_str.encode('utf-8')
         self.client_socket.sendall(message_bytes)
+
+    def _close(self):
         self.client_socket.close()
 
     def _receive(self):
@@ -171,12 +228,13 @@ class OnionClient():
                         client_socket.settimeout(DEFAULT_TIMEOUT)
                         rec_bytes = client_socket.recv(1024)
                         message = json.loads(rec_bytes.decode())
+
                         return message
 
                 except socket.timeout:
                     tries -= 1
                     if tries == 0:
                         print("ERROR    Timeout while waiting for confirmation packet [3 tries]\n")
-                        print("         Directory connection exiting. . .")
-                        return
+                        print("         Directory connection exiting. . .\n")
+                        return -1
                     continue
