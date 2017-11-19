@@ -7,6 +7,7 @@ import string
 from encryption import FernetEncryptor
 import RSA
 import packet_manager as pm
+import get_request as gr
 
 class NodeSwitchboard(Thread):
 
@@ -71,71 +72,118 @@ class NodeSwitchboard(Thread):
         """
 
         message = json.load(json_object)
-
-        if 'relayFlag' in message and message['relayFlag']:
-                # message is a relay message; try decrypting the payload
-                key = self.node_key_table.get_key(message['circID'])
-                decrypted_payload = FernetEncryptor.decrypt(message['encrypted_data'], key)
-
-                if 'isDecrypted' in decrypted_payload:
-                    if message['command'] == "extend":
-                        # message has extend command and managed to decrypt it
-                        # -> create a new control packet cmd=create, send to next node
-                        destID = self._generate_new_circID()
-                        self.node_relay_table.add_relay_entry(message['circID'], destID)
-
-                        pkt = pm.new_control_packet(destID, "create", decrypted_payload['data'])
-                        self._send(pkt, decrypted_payload['ip'], decrypted_payload['port'])
-                    elif message['command'] == "extended":
-                        #TODO
-                        return
-                    elif message['command'] == "relay_data":
-                        # fully decrypted a relay_data packet
-                        # -> node is an exit node; make a GET request, wait for answer, send it backwards
-                        return
-
-                else:
-                    # could not decrypt payload, meant for a node further along
-                    # -> get next node addr from table, replace circID, remove one layer, and send packet along
-                    destID = self.node_relay_table.get_dest_id(message['circID'])
-                    message['circID'] = destID
-                    message['encrypted_data'] = decrypted_payload
-                    addr = self.circuit_table.get_address(message['circID'])
-                    ip, port = addr.split(':')
-
-                    self._send(message, ip, port)
-
-        elif 'relayFlag' in message and not message['relayFlag']:
-            # received message is a control message
-            if message['command'] == "create":
-                # received half of a RSA key exchange
-                # -> create association with sender in table, deal with keys, send back a "created" packet
-                cipher_shared_key = message['data']
-                try:
-                    cipher_shared_key = int(cipher_shared_key)
-                except ValueError:
-                    print("ERROR    Could not interpret cipher shared key\n")
-                    self._close()
-                    return
-                shared_key = RSA.decrypt_RSA(cipher_shared_key, self.rsa_keys['private'], self.rsa_keys['modulus'])
-
-                self.circuit_table.add_circuit_entry(self.addr[0], self.addr[1], message['circID'])
-                self.node_key_table.add_key_entry(message['circID'], shared_key)
-
-                # send back useless data with the same length as the shared key
-                pad = ''.join(random.SystemRandom().choice(string.ascii_uppercase + string.digits) for _ in range(len(shared_key)))
-
-                pm.new_control_packet(message['circID'], "created", pad)
-
-            elif message['command'] == "created":
-                # node was appended to circuit, is adjacent, and confirms its creation
-                # TODO: -> create a confirmation relay extended
-                return
-
-            elif message['command'] == "destroy":
-                # destroy association to sender, then forward node
-                # TODO: implement this
-                return
+        if 'type' in message and message['type'] == "relay":
+            self._process_relay(message)
+        elif 'type' in message and not message['type'] == "control":
+            self._process_control(message)
         else:
-            print("ERROR    Received message has invalid format\n")
+            print("ERROR    Received message has invalid type\n")
             return
+
+
+    def _process_relay(self, message):
+        # message is going forwards,  decrypt one layer
+        if message['command'] == "extend" or message['command'] == "relay_data":
+            key = self.node_key_table.get_key(message['circID'])
+            decrypted_payload = FernetEncryptor.decrypt(message['encrypted_data'], key)
+
+            if 'isDecrypted' in decrypted_payload:
+                if message['command'] == "extend":
+                    # message has extend command and managed to decrypt it
+                    # -> create a new control packet cmd=create, send to next node
+                    destID = self._generate_new_circID()
+                    self.node_relay_table.add_relay_entry(message['circID'], destID)
+
+                    pkt = pm.new_control_packet(destID, "create", decrypted_payload['data'])
+                    self._send(pkt, decrypted_payload['ip'], decrypted_payload['port'])
+                elif message['command'] == "relay_data":
+                    # fully decrypted a relay_data packet
+                    # -> node is an exit node; make a GET request, wait for answer,
+                    #    send encrypted answer back to connecting node using same key
+                    print("Received message: ", decrypted_payload)
+                    ans = gr.web_request(decrypted_payload)
+                    if ans == '':
+                        print("ERROR    Could not complete get request; sending back gibberish")
+                        ans = ''.join(random.SystemRandom().choice(string.ascii_uppercase + string.digits) for _ in
+                                      range(len(16)))
+
+                    # TODO: place address of website here
+                    payload = pm.new_relay_payload(0, 0, ans)
+                    encrypted_payload = FernetEncryptor.encrypt(payload, key)
+
+                    pkt = pm.new_relay_packet(message['circID'], "relay_ans", encrypted_payload)
+                    ip, port = self.circuit_table.get_address(message['circID']).split(':')
+                    self._send(pkt, ip, port)
+
+            else:
+                # could not decrypt payload, meant for a node further along
+                # -> get next node addr from table, replace circID, remove one layer, and send packet along
+                destID = self.node_relay_table.get_dest_id(message['circID'])
+                message['circID'] = destID
+                message['encrypted_data'] = decrypted_payload
+                ip, port = self.circuit_table.get_address(message['circID']).split(':')
+
+                self._send(message, ip, port)
+
+        # message is going backwards, encrypt one layer
+        elif message['command'] == "extended" or message['command'] == "relay_ans":
+            # if A -> B and message was received from B and goes backwards, send it to A
+            fromID = self.node_relay_table.get_from_id(message['circID'])
+            key = self.node_key_table.get_key(fromID)
+            encrypted_payload = FernetEncryptor.encrypt(message['encrypted_data'], key)
+
+            pkt = pm.new_relay_packet(fromID, message['command'], encrypted_payload)
+            ip, port = self.circuit_table.get_address(fromID).split(':')
+            self._send(pkt, ip, port)
+
+
+    def _process_control(self, message):
+        if message['command'] == "create":
+            # received half of a RSA key exchange
+            # -> create association with sender in table, deal with keys, send back a "created" packet
+            cipher_shared_key = message['data']
+            try:
+                cipher_shared_key = int(cipher_shared_key)
+            except ValueError:
+                print("ERROR    Could not interpret cipher shared key\n")
+                self._close()
+                return
+            shared_key = RSA.decrypt_RSA(cipher_shared_key, self.rsa_keys['private'], self.rsa_keys['modulus'])
+
+            ip, port = self.addr.split(':')
+            self.circuit_table.add_circuit_entry(ip, port, message['circID'])
+            self.node_key_table.add_key_entry(message['circID'], shared_key)
+
+            # send back useless data with the same length as the shared key
+            pad = ''.join(
+                random.SystemRandom().choice(string.ascii_uppercase + string.digits) for _ in range(len(shared_key)))
+
+            pm.new_control_packet(message['circID'], "created", pad)
+
+        elif message['command'] == "created":
+            # node was appended to circuit, is adjacent, and confirms its creation
+            # -> wrap payload in "extended" packet, send it backwards
+            fromID = self.node_relay_table.get_from_id(message['circID'])
+            key = self.node_key_table.get_key(fromID)
+            encrypted_payload = FernetEncryptor.encrypt(message['data'], key)
+
+            pkt = pm.new_relay_packet(fromID, "extended", encrypted_payload)
+            ip, port = self.circuit_table.get_address(fromID).split(':')
+            self._send(pkt, ip, port)
+
+        elif message['command'] == "destroy":
+            # destroy association to sender, then forward message to next node
+            destID = self.node_relay_table.get_dest_id(message['circID'])
+
+            # exit node, i.e. reached end of circuit
+            if destID == -1:
+                return
+
+            self.node_key_table.remove_key_entry(message['circID'])
+            self.node_relay_table.remove_relay_entry(message['circID'])
+            message['circID'] = destID
+
+            ip, port = self.circuit_table.get_address(message['circID']).split(':')
+            self.circuit_table.remove_circuit_entry(ip, port)
+
+            self._send(message, ip, port)
