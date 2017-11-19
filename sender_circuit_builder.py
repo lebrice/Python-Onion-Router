@@ -13,7 +13,7 @@ NUMBER_OF_NODES = 3
 class SenderCircuitBuilder(Thread):
 
     """
-    class used by a sender (onion_socket.py) to build a circuit progressively
+    class used by a sender (onion_client.py) to build a circuit progressively
     does the following, in order:
         takes a list of 3 nodes to establish a circuit
         sends a "create" packet to the first node, containing half of key exch + shared key
