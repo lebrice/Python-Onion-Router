@@ -43,7 +43,6 @@ class NodeSwitchboard(Thread):
 
     def _send(self, message_str, ip, port):
         message_bytes = message_str.encode('utf-8')
-        self.client_socket.connect((ip, port))
         self.client_socket.sendall(message_bytes)
         self._close()
 
@@ -74,9 +73,9 @@ class NodeSwitchboard(Thread):
 
         print("received packet\n")
         message = json.loads(json_object)
-        if 'type' in message and message['type'] == "relay":
+        if message['type'] == "relay":
             self._process_relay(message)
-        elif 'type' in message and not message['type'] == "control":
+        elif message['type'] == "control":
             self._process_control(message)
         else:
             print("ERROR    Received message has invalid type\n")
@@ -152,7 +151,7 @@ class NodeSwitchboard(Thread):
                 return
             shared_key = enc.decrypt_RSA(cipher_shared_key, self.rsa_keys['private'], self.rsa_keys['modulus'])
 
-            ip, port = self.addr.split(':')
+            ip, port = self.addr
             self.circuit_table.add_circuit_entry(ip, port, message['circID'])
             self.node_key_table.add_key_entry(message['circID'], shared_key)
 
@@ -160,7 +159,8 @@ class NodeSwitchboard(Thread):
             pad = ''.join(
                 random.SystemRandom().choice(string.ascii_uppercase + string.digits) for _ in range(len(shared_key)))
 
-            pm.new_control_packet(message['circID'], "created", pad)
+            pkt = pm.new_control_packet(message['circID'], "created", pad)
+            self._send(pkt, ip, port)
 
         elif message['command'] == "created":
             # node was appended to circuit, is adjacent, and confirms its creation

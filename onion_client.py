@@ -64,7 +64,7 @@ class OnionClient(Thread):
                     except socket.timeout:
                         continue
         else:
-            print("ERROR    Node not initialized. Call node.connect() first")
+            print("ERROR    Client not initialized. Call .connect() first")
 
     def stop(self):
         self.running = False
@@ -74,7 +74,7 @@ class OnionClient(Thread):
             called from exterior to tell client to send message through the circuit
         """
         if not self.initialized:
-            print("ERROR     Client not initialized. Call OnionClient.connect() first.\n")
+            print("ERROR     Client not initialized. Call .connect() first.\n")
             return
 
         print("You tried to send a message\n")
@@ -99,10 +99,11 @@ class OnionClient(Thread):
 
         # wait for a response packet; 3 tries
         tries = 3
-        rec_bytes = 0
+        message = -1
         while tries != 0:
             try:
                 rec_bytes = self.client_socket.recv(BUFFER_SIZE)
+                message = json.loads(rec_bytes.decode())
                 break
             except socket.timeout:
                 tries -= 1
@@ -112,8 +113,6 @@ class OnionClient(Thread):
                     self._close()
                     return
                 continue
-
-        message = json.loads(rec_bytes.decode())
 
         if message == -1 or message['type'] != "dir":
             print("ERROR    Unexpected answer from directory\n")
@@ -186,23 +185,41 @@ class OnionClient(Thread):
             # send first half of key exchange
 
             self._send(pkt)
-            message = self._receive()
 
-            if message['command'] != "created" or message['command'] != "extended" or 'command' not in message:
+            # wait for a response packet; 3 tries
+            tries = 3
+            message = -1
+            while tries != 0:
+                try:
+                    rec_bytes = self.client_socket.recv(BUFFER_SIZE)
+                    message = json.loads(rec_bytes.decode())
+                    break
+                except socket.timeout:
+                    tries -= 1
+                    if tries == 0:
+                        print("ERROR    Timeout while waiting for confirmation packet [3 tries]\n")
+                        print("         Directory connection exiting. . .")
+                        self._close()
+                        return
+                    continue
+
+            if message == -1 or message['command'] != "created" or message['command'] != "extended":
                 print("ERROR    Did not receive expected confirmation packet\n")
                 print("         Circuit building exiting. . .")
+                # invalid message, ignore
+                self._close()
                 return
-            else:
-                # received "created" packet successfully -- store info in tables
-                self.sender_key_table.add_key_entry(destID, i, k)
 
-                # store connection to first circID, the entry point to the circuit
-                if (i == 0):
-                    self.circuit_table.add_circuit_entry(nodes[0].ip_address, nodes[0].receiving_port, destID)
+            # received "created" or "extended packet successfully -- store info in tables
+            # TODO check return value. right now created packets are filled with junk
+            self.sender_key_table.add_key_entry(destID, i, k)
+
+            # store connection to first circID, the entry point to the circuit
+            if (i == 0):
+                self.circuit_table.add_circuit_entry(nodes[0].ip_address, nodes[0].receiving_port, destID)
 
         print("Built circuit successfully")
-
-
+        self._close()
 
 
     def _create(self, ip, port):
@@ -215,28 +232,3 @@ class OnionClient(Thread):
 
     def _close(self):
         self.client_socket.close()
-
-    def _receive(self):
-        # wait for a response packet; 3 tries
-        tries = 3
-        with socket.socket() as recv_socket:
-            recv_socket.settimeout(DEFAULT_TIMEOUT)
-            recv_socket.bind((self.ip, self.port))
-            recv_socket.listen()
-            while tries != 0:
-                try:
-                    client_socket, client_address = recv_socket.accept()
-                    with client_socket:  # Closes it automatically.
-                        client_socket.settimeout(DEFAULT_TIMEOUT)
-                        rec_bytes = client_socket.recv(1024)
-                        message = json.loads(rec_bytes.decode())
-
-                        return message
-
-                except socket.timeout:
-                    tries -= 1
-                    if tries == 0:
-                        print("ERROR    Timeout while waiting for confirmation packet [3 tries]\n")
-                        print("         Directory connection exiting. . .\n")
-                        return -1
-                    continue
