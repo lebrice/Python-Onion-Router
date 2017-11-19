@@ -96,6 +96,7 @@ class OnionNode(threading.Thread):
         while tries != 0:
             try:
                 rec_bytes = self.client_socket.recv(BUFFER_SIZE)
+                break
             except socket.timeout:
                 tries -= 1
                 if tries == 0:
@@ -105,13 +106,14 @@ class OnionNode(threading.Thread):
                     return
                 continue
 
-        message = json.load(rec_bytes.decode())
+        message = json.loads(rec_bytes.decode())
 
         if message['type'] != "dir":
             print("ERROR    Unexpected answer from directory")
             self._close()
 
         self.network_list = message['table']
+        self._close()
 
     @property
     def running(self):
@@ -227,43 +229,42 @@ class DirectoryNode(Thread):
         f.close()
 
     def write_to_json(self, ip, port, public_exp, modulus):
-        # add new node
         try:
-            f = open('network_list.json', 'r')
-            data = json.load(f)
-
-            # if a node is already in the list, then it is trying to update its RSA info
-            updated = 0
-            for n in data['nodes in network']:
-                if n['ip'] == ip and n['port'] == port:
-                    n['public_exp'] = public_exp
-                    n['modulus'] = modulus
-                    updated = 1
-
-            # node is new: add it to network file
-            if updated == 0:
-                new_entry = {
-                    'ip': ip,
-                    'port': port,
-                    'public_exp': public_exp,
-                    'modulus': modulus
-                }
-                data['nodes in network'].append(new_entry)
-                updated = 1
-
-            with open('test.json', 'w') as f:
-                json.dump(data, f, indent=4)
-
-            return updated
+            with open('network_list.json', 'r') as f:
+                data = json.load(f)
         except FileNotFoundError:
             print("ERROR    network_list.json does not exist. Use create_json to create it\n")
             return
 
+        # if a node is already in the list, then it is trying to update its RSA info
+        updated = 0
+        for n in data['nodes in network']:
+            if n['ip'] == ip and n['port'] == port:
+                n['public_exp'] = public_exp
+                n['modulus'] = modulus
+                updated = 1
+
+        # node is new: add it to network file
+        if updated == 0:
+            new_entry = {
+                'ip': ip,
+                'port': port,
+                'public_exp': public_exp,
+                'modulus': modulus
+            }
+            data['nodes in network'].append(new_entry)
+            updated = 1
+
+        with open('network_list.json', 'w') as f:
+            f.seek(0)
+            json.dump(data, f, indent=4)
+
+        return updated
+
     def return_json(self):
         try:
-            f = open('network_list.json', 'r')
-            data = json.load(f)
-            f.close()
+            with open('network_list.json', 'r') as f:
+                data = json.load(f)
             return data
         except FileNotFoundError:
             print("ERROR    network_list.json does not exist. Use create_json to create it\n")
@@ -290,11 +291,14 @@ class DirectoryNode(Thread):
                             continue
 
                         ip, port = client_address
-                        updated = self.write_to_json(ip, port, message['public_exp'], message['modulus'])
+
+                        updated = 0
+                        if message['command'] == "dir_update":
+                            updated = self.write_to_json(ip, port, message['public_exp'], message['modulus'])
 
                         pkt = pm.new_dir_packet("dir_answer", updated, self.return_json())
                         message_bytes = pkt.encode('utf-8')
-                        client_socket.connect((ip, port))
+                        #client_socket.connect((ip, port))
                         client_socket.sendall(message_bytes)
                         client_socket.close()
 
