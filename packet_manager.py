@@ -23,7 +23,7 @@ def new_control_packet(circID, command, data):
     })
 
 
-def new_dir_packet(command, updated, data):
+def new_dir_packet(command, info, data):
     """
     packets used to contact directory node
     don't need to be encrypted, as all information here is safe
@@ -40,9 +40,12 @@ def new_dir_packet(command, updated, data):
             'command' : command
         })
     elif command == "dir_update":
+        ip, port = info
         return json.dumps({
             'type' : "dir",
             'command' : command,
+            'ip' : ip,
+            'port' : port,
             'public_exp' : data["public"],
             'modulus' : data["modulus"]
         })
@@ -50,7 +53,7 @@ def new_dir_packet(command, updated, data):
         return json.dumps({
             'type' : "dir",
             'command' : command,
-            'updated' : updated,
+            'updated' : info,
             'table' : data
         })
 

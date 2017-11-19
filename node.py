@@ -86,7 +86,7 @@ class OnionNode(threading.Thread):
 
         """
 
-        pkt = pm.new_dir_packet("dir_update", 0, self.rsa_keys)
+        pkt = pm.new_dir_packet("dir_update", (self.ip, self.port), self.rsa_keys)
         self._create(dir_ip, dir_port)
         self._send(pkt)
 
@@ -253,11 +253,9 @@ class DirectoryNode(Thread):
                             client_socket.close()
                             continue
 
-                        ip, port = client_address
-
                         updated = 0
                         if message['command'] == "dir_update":
-                            updated = self.write_to_json(ip, port, message['public_exp'], message['modulus'])
+                            updated = self.write_to_json(message['ip'], message['port'], message['public_exp'], message['modulus'])
 
                         pkt = pm.new_dir_packet("dir_answer", updated, self.return_json())
                         message_bytes = pkt.encode('utf-8')
