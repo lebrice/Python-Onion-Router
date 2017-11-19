@@ -1,14 +1,14 @@
 #!/usr/bin/python3
 """
-    Module that defines the Onion Client, used by the user to communicate using
-    the onion routing network
+    Module that defines the Onion Client, used by the user to communicate
+    through the onion routing network
 """
 from contextlib import contextmanager
 import random
 import socket
+import json
 import time
-
-from node import OnionNode
+import packet_manager as pm
 from errors import OnionSocketError, OnionNetworkError
 
 import sender_circuit_builder as scb
@@ -18,46 +18,75 @@ import RSA
 BUFFER_SIZE = 1024 # Constant for now
 DEFAULT_TIMEOUT = 1
 NUMBER_OF_NODES = 3
+DIRECTORY_IP = "127.0.0.1"
+DIRECTORY_PORT = "12345"
 
 class OnionClient():
     def __init__(self, onion_node=None):
-        self.target_ip = None
-        self.target_port = None
+        self.initialized = False
 
         self.circuit_table = ct.circuit_table()
         self.sender_key_table = ct.sender_key_table()
         self.network_list = {}
 
+    def connect(self):
+        """
+            called from exterior to tell client to prepare for transmission
+            - fetch network list
+            - build circuit
+        """
+        self._contact_dir_node()
         self._build_circuit()
+        self.initialized = True
 
-        # # TODO: Need to initialize the node properly.
-        # self.node.start()
-        # while(self.node.initialized is not True):
-        #     time.sleep(0.1)  # Thread.yield() equivalent, kindof
-
-    @property
-    def connected(self):
-        return (self.target_ip is not None) and (self.target_port is not None)
-
-    def connect(self, target_ip_info):
-        """ Connects to the given remote host, through the onion network.
+    def send(self, data):
         """
-        # NOTE: This might be a good place to build/initialize the circuit?
-        self.target_ip, self.target_port = target_ip_info
-        # TODO: Might create circuit now ?
-
-    def send(self, data: bytes):
-        """ Sends the given data to the remote host through the OnionSocket.
+            called from exterior to tell client to send message through the circuit
         """
-        # if not self.connected:
-        #     raise OnionSocketError("Onion network has not been initialized.")
-        # #message = self._create_message(data)
-        # self.node.send_message(message)
+        if not self.initialized:
+            print("ERROR     Client not initialized. Call OnionClient.connect() first.\n")
+            return
+
 
     def recv(self, buffer_size):
         """ Receives the given number of bytes from the Onion socket.
         """
         raise NotImplementedError()
+
+    def _contact_dir_node(self):
+        """
+            query dir node for network list, without including the client in the list of nodes
+            this avoids the problem of the client using itself as a node later on
+
+        """
+
+        pkt = pm.new_dir_packet("dir_query", 0, 0)
+        self._create(DIRECTORY_IP, DIRECTORY_PORT)
+        self._send(pkt)
+
+        # wait for a response packet; 3 tries
+        tries = 3
+        rec_bytes = 0
+        while tries != 0:
+            try:
+                rec_bytes = self.client_socket.recv(BUFFER_SIZE)
+            except socket.timeout:
+                tries -= 1
+                if tries == 0:
+                    print("ERROR    Timeout while waiting for confirmation packet [3 tries]\n")
+                    print("         Directory connection exiting. . .")
+                    self._close()
+                    return
+                continue
+
+        message = json.load(rec_bytes.decode())
+
+        if message['type'] != "dir":
+            print("ERROR    Unexpected answer from directory")
+            self._close()
+
+        self.network_list = message['table']
+
 
     def _select_three_random_neighbours(self):
         if len(self.network_list) < 3:
@@ -66,12 +95,14 @@ class OnionClient():
             raise OnionNetworkError(message)
         return random.sample(self.network_list['nodes in network'], 3)
 
+
     def _build_circuit(self):
         node1, node2, node3 = self._select_three_random_neighbours()
         nodes = [node1, node2, node3]
         builder = scb.SenderCircuitBuilder(nodes, self.circuit_table, self.sender_key_table)
         builder.start()
         builder.join()
+
 
     def _create(self, ip, port):
         self.client_socket = socket.socket(DEFAULT_TIMEOUT)
