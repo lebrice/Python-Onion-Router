@@ -1,4 +1,5 @@
 import json
+import random
 
 # try to create a json file, and write to it
 
@@ -37,6 +38,8 @@ for n in data['nodes in network']:
         n['ip'] = "CHANGED IP"
         n['port'] = "CHANGED PORT"
         updated = 1
+
+random_entry = random.sample(data['nodes in network'], 1)
 
 with open('test.json', 'w') as f:
     json.dump(data, f)
