@@ -126,10 +126,10 @@ class OnionClient(Thread):
 
 
     def _select_random_nodes(self):
-        if len(self.network_list) < self.number_of_nodes:
+        if len(self.network_list['nodes in network']) < self.number_of_nodes:
             print("ERROR    There are not enough nodes to build the circuit. Current: ",
                   len(self.network_list), "requested", self.number_of_nodes)
-            return
+            return -1
 
         return random.sample(self.network_list['nodes in network'], self.number_of_nodes)
 
@@ -154,6 +154,8 @@ class OnionClient(Thread):
 
     def _build_circuit(self):
         nodes = self._select_random_nodes()
+        if nodes == -1:
+            return
 
         # will always send the packet through the first node to reach the others
         self._create(nodes[0]['ip'], nodes[0]['port'])
