@@ -54,7 +54,7 @@ class OnionNode(threading.Thread):
         with the onion routing network
         """
         self.running = True
-        self.contact_dir_node()
+        self._contact_dir_node()
         self.initialized = True
 
         with socket.socket() as receiving_socket:
@@ -74,10 +74,10 @@ class OnionNode(threading.Thread):
                 except socket.timeout:
                     continue
 
-    def contact_dir_node(self):
+    def _contact_dir_node(self):
         """
             make the node known to the directory node
-            contact directory node with a dir_query packet
+            contact directory node with a dir_update packet
             give info:
                 ip, port (known through socket)
                 public rsa keys of this node
@@ -85,7 +85,7 @@ class OnionNode(threading.Thread):
 
         """
 
-        pkt = pm.new_dir_packet("dir_query", 0, self.rsa_keys)
+        pkt = pm.new_dir_packet("dir_update", 0, self.rsa_keys)
         self._create(DIRECTORY_IP, DIRECTORY_PORT)
         self._send(pkt)
 
@@ -241,10 +241,10 @@ class DirectoryNode(Thread):
                     'modulus': modulus
                 }
                 data['nodes in network'].append(new_entry)
+                updated = 1
 
             with open('test.json', 'w') as f:
-                json.dump(data, f)
-                f.close()
+                json.dump(data, f, indent=4)
 
             return updated
         except FileNotFoundError:

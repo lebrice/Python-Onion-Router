@@ -28,12 +28,18 @@ def new_dir_packet(command, updated, data):
     packets used to contact directory node
     don't need to be encrypted, as all information here is safe
 
-        -> dir_query  : node queries directory for a list of all nodes in onion network
-        -> dir_answer : dir node sends all connected nodes back to node
-                        if node was already in directory, update its rsa_keys
+        -> dir_query    : client queries directory for network list only.
+        -> dir_update   : node queries directory for network list, and is added to the list
+        -> dir_answer   : dir node sends all connected nodes back to node
+                          if node was already in directory, update its rsa_keys
 
     """
     if command == "dir_query":
+        return json.dumps({
+            'type' : "dir",
+            'command' : command
+        })
+    elif command == "dir_update":
         return json.dumps({
             'type' : "dir",
             'command' : command,
