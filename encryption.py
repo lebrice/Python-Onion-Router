@@ -7,6 +7,7 @@
 """
 import random as rd
 import ssl
+import base64
 from cryptography.fernet import Fernet
 random_function = ssl.RAND_bytes
 
@@ -20,18 +21,18 @@ random_function = ssl.RAND_bytes
         3.  use key for subsequent encryption layers (the "onion")
 """
 
-
+# returns a string so it can be encoded by rsa
 def generate_fernet_key():
-    return Fernet.generate_key()
-
+    return str(Fernet.generate_key())
 
 def encrypt_fernet(message, key):
-    cipher_suite = Fernet(key)
+    k = bytes(key)
+    cipher_suite = Fernet(k)
     return cipher_suite.encrypt(message.encrypted)
 
-
 def decrypt_fernet(message, key):
-    cipher_suite = Fernet(key)
+    k = bytes(key)
+    cipher_suite = Fernet(k)
     return cipher_suite.decrypt(message.encrypted)
 
 
