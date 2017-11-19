@@ -80,24 +80,8 @@ class SenderCircuitBuilder(Thread):
 
             # send first half of key exchange
             self._send(pkt)
+            message = self._receive()
 
-            # wait for a response packet; 3 tries
-            tries = 3
-            rec_bytes = 0
-            while tries != 0:
-                try:
-                    rec_bytes = self.client_socket.recv(BUFFER_SIZE)
-                except socket.timeout:
-                    tries -= 1
-                    if tries == 0:
-                        print("ERROR    Timeout while waiting for confirmation packet [3 tries]\n")
-                        print("         Circuit building exiting. . .")
-                        self._close()
-                        return
-                    continue
-
-            # see if correct message was received
-            message = json.loads(rec_bytes.decode())
             if message['command'] != "created" or message['command'] != "extended" or 'command' not in message:
                 print("ERROR    Did not receive expected confirmation packet\n")
                 print("         Circuit building exiting. . .")
@@ -125,3 +109,27 @@ class SenderCircuitBuilder(Thread):
 
     def _close(self):
         self.client_socket.close()
+
+    def _receive(self):
+        # wait for a response packet; 3 tries
+        tries = 3
+        with socket.socket() as recv_socket:
+            recv_socket.settimeout(DEFAULT_TIMEOUT)
+            recv_socket.bind((self.ip, self.port))
+            recv_socket.listen()
+            while tries != 0:
+                try:
+                    client_socket, client_address = recv_socket.accept()
+                    with client_socket:  # Closes it automatically.
+                        client_socket.settimeout(DEFAULT_TIMEOUT)
+                        rec_bytes = client_socket.recv(1024)
+                        message = json.loads(rec_bytes.decode())
+                        return message
+
+                except socket.timeout:
+                    tries -= 1
+                    if tries == 0:
+                        print("ERROR    Timeout while waiting for confirmation packet [3 tries]\n")
+                        print("         Directory connection exiting. . .")
+                        return
+                    continue

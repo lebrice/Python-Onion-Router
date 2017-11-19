@@ -5,11 +5,12 @@
 """
 from contextlib import contextmanager
 import random
+from random import randint
 import socket
 import json
 import time
 import packet_manager as pm
-from errors import OnionSocketError, OnionNetworkError
+from encryption import FernetEncryptor
 
 import sender_circuit_builder as scb
 import circuit_tables as ct
@@ -19,8 +20,10 @@ BUFFER_SIZE = 1024 # Constant for now
 DEFAULT_TIMEOUT = 1
 
 class OnionClient():
-    def __init__(self, number_of_nodes):
+    def __init__(self, ip, port, number_of_nodes):
         self.initialized = False
+        self.ip = ip
+        self.port = port
         self.number_of_nodes = number_of_nodes
 
         self.circuit_table = ct.circuit_table()
@@ -61,29 +64,13 @@ class OnionClient():
         """
 
         pkt = pm.new_dir_packet("dir_query", 0, 0)
-        self._create(dir_ip, dir_port)
-        self._send(pkt)
-
-        # wait for a response packet; 3 tries
-        tries = 3
-        rec_bytes = 0
-        while tries != 0:
-            try:
-                rec_bytes = self.client_socket.recv(BUFFER_SIZE)
-            except socket.timeout:
-                tries -= 1
-                if tries == 0:
-                    print("ERROR    Timeout while waiting for confirmation packet [3 tries]\n")
-                    print("         Directory connection exiting. . .")
-                    self._close()
-                    return
-                continue
-
-        message = json.load(rec_bytes.decode())
+        self._send(dir_ip, dir_port, pkt)
+        message = self._receive()
 
         if message['type'] != "dir":
-            print("ERROR    Unexpected answer from directory")
-            self._close()
+            print("ERROR    Unexpected answer from directory\n")
+            # invalid message, ignore
+            return
 
         self.network_list = message['table']
 
@@ -97,23 +84,99 @@ class OnionClient():
         return random.sample(self.network_list['nodes in network'], self.number_of_nodes)
 
 
+    def _generate_new_circID(self):
+        # define a limit to how many circuits the node can be part of
+        max_circuit_no = 100
+
+        if self.circuit_table.get_length() == max_circuit_no:
+            print("ERROR    Too many active circuits; could not create circuit. Current max is ", max_circuit_no)
+            print("         Try deleting a circuit before creating a new one")
+            return
+
+        # generate a circID that is not in use in the circuit_table
+        while True:
+            circID = randint(0, 10000)
+            if self.circuit_table.get_address(circID) == -1:
+                break
+
+        return circID
+
+
     def _build_circuit(self):
         nodes = self._select_random_nodes()
-        builder = scb.SenderCircuitBuilder(nodes, self.circuit_table, self.sender_key_table)
-        builder.start()
-        builder.join()
+
+        for i in range(0, len(nodes)):
+            k = FernetEncryptor.generate_key()
+            ciphered_shared_key = RSA.encrypt_RSA(k, nodes[i]['public_exp'], nodes[i]['modulus'])
+
+            if i == 0:
+                # first link is special: only one to get control "create" packet
+                destID = self._generate_new_circID()
+                self.circuit_table.add_circuit_entry(nodes[0]['ip'], nodes[0]['port'], destID)
+                self.sender_key_table.add_key_entry(destID, i, k)
+                pkt = pm.new_control_packet(destID, "create", ciphered_shared_key)
+            else:
+                # data to be placed in "extend" packet payload. nodes will use circIDs to navigate,
+                # until a node has decrypted the payload and finds the ip and port of the new node
+                encrypted_data = pm.new_relay_payload(nodes[i]['ip'], nodes[i]['port'], ciphered_shared_key)
+
+                # apply layers of encryption on shared key + key exchange before sending it
+                # e.g. for node 2, apply layer 1 then layer 0
+                for j in range(i - 1, -1, -1):
+                    layer = self.sender_key_table.get_key(destID, j)
+                    encrypted_data = FernetEncryptor.encrypt(encrypted_data, layer)
+
+                pkt = pm.new_relay_packet(destID, "extend", encrypted_data)
+
+            # send first half of key exchange
+            # will always send the packet through the first node to reach the others
+            self._send(nodes[0]['ip'], nodes[0]['port'], pkt)
+            message = self._receive()
+
+            if message['command'] != "created" or message['command'] != "extended" or 'command' not in message:
+                print("ERROR    Did not receive expected confirmation packet\n")
+                print("         Circuit building exiting. . .")
+                return
+            else:
+                # received "created" packet successfully -- store info in tables
+                self.sender_key_table.add_key_entry(destID, i, k)
+
+                # store connection to first circID, the entry point to the circuit
+                if (i == 0):
+                    self.circuit_table.add_circuit_entry(nodes[0].ip_address, nodes[0].receiving_port, destID)
+
+        print("Built circuit successfully")
 
 
-    def _create(self, ip, port):
+
+
+    def _send(self, ip, port, message_str):
         self.client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.client_socket.connect((ip, port))
-
-    def _send(self, message_str):
         message_bytes = message_str.encode('utf-8')
         self.client_socket.sendall(message_bytes)
-
-    def _close(self):
         self.client_socket.close()
 
+    def _receive(self):
+        # wait for a response packet; 3 tries
+        tries = 3
+        with socket.socket() as recv_socket:
+            recv_socket.settimeout(DEFAULT_TIMEOUT)
+            recv_socket.bind((self.ip, self.port))
+            recv_socket.listen()
+            while tries != 0:
+                try:
+                    client_socket, client_address = recv_socket.accept()
+                    with client_socket:  # Closes it automatically.
+                        client_socket.settimeout(DEFAULT_TIMEOUT)
+                        rec_bytes = client_socket.recv(1024)
+                        message = json.loads(rec_bytes.decode())
+                        return message
 
-
+                except socket.timeout:
+                    tries -= 1
+                    if tries == 0:
+                        print("ERROR    Timeout while waiting for confirmation packet [3 tries]\n")
+                        print("         Directory connection exiting. . .")
+                        return
+                    continue
