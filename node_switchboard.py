@@ -71,7 +71,7 @@ class NodeSwitchboard(Thread):
         parses the packet that was received, and acts accordingly
         """
 
-        message = json.load(json_object)
+        message = json.loads(json_object)
         if 'type' in message and message['type'] == "relay":
             self._process_relay(message)
         elif 'type' in message and not message['type'] == "control":

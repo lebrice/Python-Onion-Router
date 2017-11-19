@@ -105,7 +105,7 @@ class OnionClient():
 
 
     def _create(self, ip, port):
-        self.client_socket = socket.socket(DEFAULT_TIMEOUT)
+        self.client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.client_socket.connect((ip, port))
 
     def _send(self, message_str):

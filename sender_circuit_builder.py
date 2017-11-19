@@ -97,7 +97,7 @@ class SenderCircuitBuilder(Thread):
                     continue
 
             # see if correct message was received
-            message = json.load(rec_bytes.decode())
+            message = json.loads(rec_bytes.decode())
             if message['command'] != "created" or message['command'] != "extended" or 'command' not in message:
                 print("ERROR    Did not receive expected confirmation packet\n")
                 print("         Circuit building exiting. . .")
@@ -116,7 +116,7 @@ class SenderCircuitBuilder(Thread):
 
 
     def _create(self, ip, port):
-        self.client_socket = socket.socket(DEFAULT_TIMEOUT)
+        self.client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.client_socket.connect((ip, port))
 
     def _send(self, message_str):

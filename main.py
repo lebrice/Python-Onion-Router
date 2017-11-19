@@ -14,20 +14,20 @@ if __name__ == "__main__":
     print("Creating onion routing with {} nodes".format(args.node_count))
 
     # hard set 3 nodes for now:
-    dir_ip = "127.0.0.1"
-    dir_port = "12345"
+    dir_ip = '127.0.0.1'
+    dir_port = 12345
     dir = node.DirectoryNode(dir_ip, dir_port)
     dir.start()
 
-    node1 = node.OnionNode("127.0.0.1", "14445")
+    node1 = node.OnionNode('127.0.0.1', 14445)
     node1.connect(dir_ip, dir_port)
     node1.start()
 
-    node2 = node.OnionNode("127.0.0.1", "8888")
+    node2 = node.OnionNode('127.0.0.1', 8888)
     node2.connect(dir_ip, dir_port)
     node2.start()
 
-    node3 = node.OnionNode("127.0.0.1", "55616")
+    node3 = node.OnionNode('127.0.0.1', 55616)
     node3.connect(dir_ip, dir_port)
     node3.start()
 

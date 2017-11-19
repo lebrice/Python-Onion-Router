@@ -169,7 +169,7 @@ class OnionNode(threading.Thread):
     #         return neighbours
 
     def _create(self, ip, port):
-        self.client_socket = socket.socket(DEFAULT_TIMEOUT)
+        self.client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.client_socket.connect((ip, port))
 
     def _send(self, message_str):
@@ -206,9 +206,17 @@ class DirectoryNode(Thread):
         self._running_flag = False
         self._running_lock = Lock()
 
+        self.create_json()
+
     def create_json(self):
-        # create the network file, add directory node's info to it
-        f = open('network_list.json', 'x')
+        # create the network file if it doesn't exist,
+        # and add directory node's info to it
+        try:
+            f = open('network_list.json', 'x')
+        except FileExistsError:
+            f = open('network_list.json', 'w')
+            f.seek(0)
+
         new = {'nodes in network': [{
             'ip': self.ip,
             'port': self.port,
@@ -263,7 +271,6 @@ class DirectoryNode(Thread):
 
     def run(self):
         self.running = True
-        self.create_json()
 
         with socket.socket() as recv_socket:
             recv_socket.settimeout(DEFAULT_TIMEOUT)
@@ -275,17 +282,17 @@ class DirectoryNode(Thread):
                     with client_socket:  # Closes it automatically.
                         client_socket.settimeout(DEFAULT_TIMEOUT)
                         rec_bytes = client_socket.recv(1024)
-                        message = json.load(rec_bytes.decode())
+                        message = json.loads(rec_bytes.decode())
 
                         if message['type'] != "dir":
                             # invalid message, ignore
                             client_socket.close()
                             continue
 
-                        ip, port = client_address.split(':')
+                        ip, port = client_address
                         updated = self.write_to_json(ip, port, message['public_exp'], message['modulus'])
 
-                        pkt = pm.new_dir_packet("dir_answer", updated, self.return_json)
+                        pkt = pm.new_dir_packet("dir_answer", updated, self.return_json())
                         message_bytes = pkt.encode('utf-8')
                         client_socket.connect((ip, port))
                         client_socket.sendall(message_bytes)
