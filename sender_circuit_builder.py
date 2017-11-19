@@ -4,6 +4,7 @@ import packet_manager as pm
 from encryption import FernetEncryptor
 import RSA
 import json
+from random import randint
 
 BUFFER_SIZE = 1024 # Constant for now
 DEFAULT_TIMEOUT = 1
@@ -27,34 +28,48 @@ class SenderCircuitBuilder(Thread):
 
     def __init__(self,
                  nodes,
-                 rsa_keys,
                  circuit_table,
                  sender_key_table):
         super().__init__()
         self.nodes = nodes
-        self.rsa_keys = rsa_keys
         self.circuit_table = circuit_table()
         self.sender_key_table = sender_key_table()
 
+    def _generate_new_circID(self):
+        # define a limit to how many circuits the node can be part of
+        max_circuit_no = 100
+
+        if self.circuit_table.get_length() == max_circuit_no:
+            print("ERROR    Too many active circuits; could not create circuit. Current max is ", max_circuit_no)
+            print("         Try deleting a circuit before creating a new one")
+            return
+
+        # generate a circID that is not in use in the circuit_table
+        while True:
+            circID = randint(0, 10000)
+            if self.circuit_table.get_address(circID) == -1:
+                break
+
+        return circID
+
     def run(self):
         # will always send the packet through the first node to reach the others
-        self._create(self.nodes[0].ip_address, self.nodes[0].receiving_port)
+        self._create(self.nodes[0]['ip'], self.nodes[0]['port'])
 
         for i in range(0, NUMBER_OF_NODES):
             k = FernetEncryptor.generate_key()
-            ciphered_shared_key = RSA.encrypt_RSA(k, self.rsa_keys["public"], self.rsa_keys["modulus"])
+            ciphered_shared_key = RSA.encrypt_RSA(k, self.nodes[i]['public_exp'], self.nodes[i]['modulus'])
 
             if i == 0:
-                destID, pkt = pm.new_control_packet(0, "create", ciphered_shared_key)
+                # first link is special: only one to get control "create" packet
+                destID = self._generate_new_circID()
+                self.circuit_table.add_circuit_entry(self.nodes[0]['ip'], self.nodes[0]['port'], destID)
+                self.sender_key_table.add_key_entry(destID, i, k)
+                pkt = pm.new_control_packet(destID, "create", ciphered_shared_key)
             else:
                 # data to be placed in "extend" packet payload. nodes will use circIDs to navigate,
                 # until a node has decrypted the payload and finds the ip and port of the new node
-                encrypted_data = {'encrypted_data': [{
-                    'isDecrypted': True,
-                    'ip': self.nodes[i].ip_address,
-                    'port': self.nodes[i].receiving_port,
-                    'data': ciphered_shared_key
-                }]}
+                encrypted_data = pm.new_relay_payload(self.nodes[i]['ip'], self.nodes[i]['port'], ciphered_shared_key)
 
                 # apply layers of encryption on shared key + key exchange before sending it
                 # e.g. for node 2, apply layer 1 then layer 0
@@ -62,7 +77,7 @@ class SenderCircuitBuilder(Thread):
                     layer = self.sender_key_table.get_key(destID, j)
                     encrypted_data = FernetEncryptor.encrypt(encrypted_data, layer)
 
-                _, pkt = pm.new_relay_packet(destID, "extend", encrypted_data)
+                pkt = pm.new_relay_packet(destID, "extend", encrypted_data)
 
             # send first half of key exchange
             self._send(pkt)
