@@ -179,12 +179,13 @@ class OnionClient(Thread):
                 # e.g. for node 2, apply layer 1 then layer 0
                 for j in range(i - 1, -1, -1):
                     layer = self.sender_key_table.get_key(destID, j)
+                    print("layer {}".format(layer))
                     encrypted_data = enc.encrypt_fernet(encrypted_data, layer)
 
                 pkt = pm.new_relay_packet(destID, "extend", encrypted_data)
 
             # send first half of key exchange
-            print("sending packet {}".format(i))
+            print("sending packet {},{}".format(i, destID))
             self._send(pkt)
 
             # wait for a response packet; 30 tries
@@ -193,7 +194,7 @@ class OnionClient(Thread):
             while tries != 0:
                 try:
                     rec_bytes = self.client_socket.recv(BUFFER_SIZE)
-                    print(rec_bytes)
+                    print("first client receiver {}".format(rec_bytes))
                     message = json.loads(rec_bytes.decode())
                     break
                 except socket.timeout:

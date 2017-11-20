@@ -29,6 +29,7 @@ class circuit_table():
 
     # needed for nodes that have both incoming and outgoing circIDs; better than maintaining two tables
     def get_address(self, circID):
+        print(circID)
         #this is printed when the table is empty, even for first circuit that is built
         if not self.table:
             return -1
@@ -43,7 +44,7 @@ class circuit_table():
 
     def print_table(self):
         for k in self.table.keys():
-            print(self.table[k])
+            print(k.format(": ", self.table[k]))
 
 
 class sender_key_table():

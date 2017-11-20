@@ -43,17 +43,33 @@ class NodeSwitchboard(Thread):
         message_json = message_bytes.decode('utf-8')
         self._process_message(message_json)
 
-    def _send(self, message_str, ip, port):
+    def _send(self, message_str):
         message_bytes = message_str.encode('utf-8')
         print("switchboard {}".format(message_bytes))
         self.client_socket.sendall(message_bytes)
         self._close()
 
-    def _sendExtend(self, message_str, ip, port):
+    def _relay(self, message_str, ip, port):
         client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         client_socket.connect((ip, port))
         client_socket.sendall(message_str.encode('utf-8'))
-        client_socket.close()
+        # wait for a response packet; 3 tries
+        tries = 3
+        rec_bytes = 0
+        while tries != 0:
+            try:
+                rec_bytes = client_socket.recv(BUFFER_SIZE)
+                break
+            except socket.timeout:
+                tries -= 1
+                if tries == 0:
+                    print("ERROR    Timeout while waiting for confirmation packet [3 tries]\n")
+                    print("         Directory connection exiting. . .")
+                    self._close()
+                    return
+                continue
+        print("relay received {}".format(rec_bytes))
+        self._send(rec_bytes.decode('UTF-8'))
 
     def _close(self):
         #self.client_socket.shutdown(socket.SHUT_RDWR)
@@ -81,7 +97,7 @@ class NodeSwitchboard(Thread):
         parses the packet that was received, and acts accordingly
         """
 
-        print("received packet\n")
+        print("received packet")
         message = json.loads(json_object)
         if message['type'] == "relay":
             self._process_relay(message)
@@ -104,12 +120,13 @@ class NodeSwitchboard(Thread):
                     # -> create a new control packet cmd=create, send to next node
                     destID = self._generate_new_circID()
                     self.node_relay_table.add_relay_entry(message['circID'], destID)
-
                     pkt = pm.new_control_packet(destID, "create", decrypted_payload['data'])
 
                     #oli garbage code
                     print("extending")
-                    self._sendExtend(pkt, decrypted_payload['ip'], decrypted_payload['port'])
+                    self.circuit_table.add_circuit_entry(decrypted_payload['ip'], decrypted_payload['port'], destID)
+                    self._relay(pkt, decrypted_payload['ip'], decrypted_payload['port'])
+                    #self._sendExtend(pkt, decrypted_payload['ip'], decrypted_payload['port'])
                     #self._send(pkt, decrypted_payload['ip'], decrypted_payload['port'])
                 elif message['command'] == "relay_data":
                     # fully decrypted a relay_data packet
@@ -128,10 +145,13 @@ class NodeSwitchboard(Thread):
 
                     pkt = pm.new_relay_packet(message['circID'], "relay_ans", encrypted_payload)
                     ip, port = self.circuit_table.get_address(message['circID']).split(':')
-                    self._send(pkt, ip, port)
+                    #oli garbage
+                    #self._send(pkt)
+                    self._relay(pkt, ip, port)
 
             else:
                 print("send along packet")
+                print(message['circID'])
                 # could not decrypt payload, meant for a node further along
                 # -> get next node addr from table, replace circID, remove one layer, and send packet along
                 destID = self.node_relay_table.get_dest_id(message['circID'])
@@ -139,8 +159,12 @@ class NodeSwitchboard(Thread):
                 message['encrypted_data'] = decrypted_payload
                 print(self.circuit_table.table)
                 ip, port = self.circuit_table.get_address(message['circID']).split(':')
-
-                self._send(message, ip, port)
+                print(ip)
+                print(port)
+                #oli garbage
+                #self._send(message)
+                print("message to send along {}".format(message))
+                self._relay(json.dumps(message), ip, int(port))
 
         # message is going backwards, encrypt one layer
         elif message['command'] == "extended" or message['command'] == "relay_ans":
@@ -151,11 +175,12 @@ class NodeSwitchboard(Thread):
 
             pkt = pm.new_relay_packet(fromID, message['command'], encrypted_payload)
             ip, port = self.circuit_table.get_address(fromID).split(':')
-            self._send(pkt, ip, port)
+            self._send(pkt)
 
 
     def _process_control(self, message):
         if message['command'] == "create":
+            print("create")
             # received half of a RSA key exchange
             # -> create association with sender in table, deal with keys, send back a "created" packet
             cipher_shared_key = message['data']
@@ -169,6 +194,7 @@ class NodeSwitchboard(Thread):
             #shared key is in bytes at this point, should decode?
             ip, port = self.addr
             self.circuit_table.add_circuit_entry(ip, port, message['circID'])
+            self.circuit_table.print_table()
             self.node_key_table.add_key_entry(message['circID'], shared_key)
 
             # send back useless data with the same length as the shared key
@@ -176,7 +202,7 @@ class NodeSwitchboard(Thread):
                 random.SystemRandom().choice(string.ascii_uppercase + string.digits) for _ in range(len(shared_key)))
 
             pkt = pm.new_control_packet(message['circID'], "created", pad)
-            self._send(pkt, ip, port)
+            self._send(pkt)
             #self._sendExtend(pkt,ip,port)
 
         elif message['command'] == "created":
@@ -188,7 +214,7 @@ class NodeSwitchboard(Thread):
 
             pkt = pm.new_relay_packet(fromID, "extended", encrypted_payload)
             ip, port = self.circuit_table.get_address(fromID).split(':')
-            self._send(pkt, ip, port)
+            self._send(pkt)
 
         elif message['command'] == "destroy":
             # destroy association to sender, then forward message to next node
@@ -205,4 +231,4 @@ class NodeSwitchboard(Thread):
             ip, port = self.circuit_table.get_address(message['circID']).split(':')
             self.circuit_table.remove_circuit_entry(ip, port)
 
-            self._send(message, ip, port)
+            self._send(message)
