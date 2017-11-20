@@ -183,11 +183,10 @@ class OnionClient(Thread):
                 pkt = pm.new_relay_packet(destID, "extend", encrypted_data)
 
             # send first half of key exchange
-
             self._send(pkt)
 
-            # wait for a response packet; 3 tries
-            tries = 3
+            # wait for a response packet; 30 tries
+            tries = 30
             message = -1
             while tries != 0:
                 try:
@@ -197,13 +196,13 @@ class OnionClient(Thread):
                 except socket.timeout:
                     tries -= 1
                     if tries == 0:
-                        print("ERROR    Timeout while waiting for confirmation packet [3 tries]\n")
+                        print("ERROR    Timeout while waiting for confirmation packet [30 tries]\n")
                         print("         Directory connection exiting. . .")
                         self._close()
                         return
                     continue
 
-            if message == -1 or message['command'] != "created" or message['command'] != "extended":
+            if message == -1 or (message['command'] != 'created' and message['command'] != 'extended'):
                 print("ERROR    Did not receive expected confirmation packet\n")
                 print("         Circuit building exiting. . .")
                 # invalid message, ignore
@@ -216,7 +215,7 @@ class OnionClient(Thread):
 
             # store connection to first circID, the entry point to the circuit
             if (i == 0):
-                self.circuit_table.add_circuit_entry(nodes[0].ip_address, nodes[0].receiving_port, destID)
+                self.circuit_table.add_circuit_entry(nodes[0]['ip'], nodes[0]['port'], destID)
 
         print("Built circuit successfully")
         self._close()
