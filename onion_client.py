@@ -121,6 +121,7 @@ class OnionClient(Thread):
             return
 
         self.network_list = message['table']
+        print("contacting dir")
         self._close()
 
 
@@ -150,7 +151,6 @@ class OnionClient(Thread):
 
         return circID
 
-
     def _build_circuit(self):
         nodes = self._select_random_nodes()
         if nodes == -1:
@@ -170,6 +170,7 @@ class OnionClient(Thread):
                 self.sender_key_table.add_key_entry(destID, i, k)
                 pkt = pm.new_control_packet(destID, "create", ciphered_shared_key)
             else:
+                self._create(nodes[0]['ip'], nodes[0]['port'])
                 # data to be placed in "extend" packet payload. nodes will use circIDs to navigate,
                 # until a node has decrypted the payload and finds the ip and port of the new node
                 encrypted_data = pm.new_relay_payload(nodes[i]['ip'], nodes[i]['port'], ciphered_shared_key)
@@ -183,6 +184,7 @@ class OnionClient(Thread):
                 pkt = pm.new_relay_packet(destID, "extend", encrypted_data)
 
             # send first half of key exchange
+            print("sending packet {}".format(i))
             self._send(pkt)
 
             # wait for a response packet; 30 tries
@@ -191,10 +193,12 @@ class OnionClient(Thread):
             while tries != 0:
                 try:
                     rec_bytes = self.client_socket.recv(BUFFER_SIZE)
+                    print(rec_bytes)
                     message = json.loads(rec_bytes.decode())
                     break
                 except socket.timeout:
                     tries -= 1
+                    print(tries)
                     if tries == 0:
                         print("ERROR    Timeout while waiting for confirmation packet [30 tries]\n")
                         print("         Directory connection exiting. . .")
@@ -227,7 +231,10 @@ class OnionClient(Thread):
 
     def _send(self, message_str):
         message_bytes = message_str.encode('utf-8')
+        print("client {}".format(message_bytes))
         self.client_socket.sendall(message_bytes)
+        print("sent")
 
     def _close(self):
+        print("closing socket")
         self.client_socket.close()

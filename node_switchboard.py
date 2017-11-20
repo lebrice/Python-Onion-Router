@@ -30,6 +30,7 @@ class NodeSwitchboard(Thread):
                  rsa_keys):
         super().__init__()
         self.client_socket = client_socket
+        print("addr {}".format(addr))
         self.addr = addr
         self.circuit_table = circuit_table
         self.node_key_table = node_key_table
@@ -38,15 +39,24 @@ class NodeSwitchboard(Thread):
 
     def run(self):
         message_bytes = self.client_socket.recv(BUFFER_SIZE)
+        print("receiver {}".format(message_bytes))
         message_json = message_bytes.decode('utf-8')
         self._process_message(message_json)
 
     def _send(self, message_str, ip, port):
         message_bytes = message_str.encode('utf-8')
+        print("switchboard {}".format(message_bytes))
         self.client_socket.sendall(message_bytes)
         self._close()
 
+    def _sendExtend(self, message_str, ip, port):
+        client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        client_socket.connect((ip, port))
+        client_socket.sendall(message_str.encode('utf-8'))
+        client_socket.close()
+
     def _close(self):
+        #self.client_socket.shutdown(socket.SHUT_RDWR)
         self.client_socket.close()
 
     def _generate_new_circID(self):
@@ -87,7 +97,7 @@ class NodeSwitchboard(Thread):
         if message['command'] == "extend" or message['command'] == "relay_data":
             key = self.node_key_table.get_key(message['circID'])
             decrypted_payload = enc.decrypt_fernet(message['encrypted_data'], key)
-
+            print("decrypted {}".format(decrypted_payload))
             if 'isDecrypted' in decrypted_payload:
                 if message['command'] == "extend":
                     # message has extend command and managed to decrypt it
@@ -96,7 +106,11 @@ class NodeSwitchboard(Thread):
                     self.node_relay_table.add_relay_entry(message['circID'], destID)
 
                     pkt = pm.new_control_packet(destID, "create", decrypted_payload['data'])
-                    self._send(pkt, decrypted_payload['ip'], decrypted_payload['port'])
+
+                    #oli garbage code
+                    print("extending")
+                    self._sendExtend(pkt, decrypted_payload['ip'], decrypted_payload['port'])
+                    #self._send(pkt, decrypted_payload['ip'], decrypted_payload['port'])
                 elif message['command'] == "relay_data":
                     # fully decrypted a relay_data packet
                     # -> node is an exit node; make a GET request, wait for answer,
@@ -117,11 +131,13 @@ class NodeSwitchboard(Thread):
                     self._send(pkt, ip, port)
 
             else:
+                print("send along packet")
                 # could not decrypt payload, meant for a node further along
                 # -> get next node addr from table, replace circID, remove one layer, and send packet along
                 destID = self.node_relay_table.get_dest_id(message['circID'])
                 message['circID'] = destID
                 message['encrypted_data'] = decrypted_payload
+                print(self.circuit_table.table)
                 ip, port = self.circuit_table.get_address(message['circID']).split(':')
 
                 self._send(message, ip, port)
@@ -150,7 +166,7 @@ class NodeSwitchboard(Thread):
                 self._close()
                 return
             shared_key = enc.decrypt_RSA(cipher_shared_key, self.rsa_keys['private'], self.rsa_keys['modulus'])
-
+            #shared key is in bytes at this point, should decode?
             ip, port = self.addr
             self.circuit_table.add_circuit_entry(ip, port, message['circID'])
             self.node_key_table.add_key_entry(message['circID'], shared_key)
@@ -161,6 +177,7 @@ class NodeSwitchboard(Thread):
 
             pkt = pm.new_control_packet(message['circID'], "created", pad)
             self._send(pkt, ip, port)
+            #self._sendExtend(pkt,ip,port)
 
         elif message['command'] == "created":
             # node was appended to circuit, is adjacent, and confirms its creation

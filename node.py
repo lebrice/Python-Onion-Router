@@ -138,6 +138,7 @@ class OnionNode(threading.Thread):
 
     def _send(self, message_str):
         message_bytes = message_str.encode('utf-8')
+        print(message_bytes)
         self.client_socket.sendall(message_bytes)
 
     def _close(self):

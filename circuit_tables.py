@@ -29,6 +29,9 @@ class circuit_table():
 
     # needed for nodes that have both incoming and outgoing circIDs; better than maintaining two tables
     def get_address(self, circID):
+        #this is printed when the table is empty, even for first circuit that is built
+        if not self.table:
+            return -1
         for k in self.table.keys():
             if self.table[k] == circID:
                 return k
@@ -135,6 +138,9 @@ class node_relay_table():
             return -1
 
     def get_dest_id(self, fromID):
+        # empty table triggers error message
+        if not self.table:
+            return -1
         try:
             return self.table[fromID]
         except LookupError:
@@ -142,6 +148,9 @@ class node_relay_table():
             return -1
 
     def get_from_id(self, destID):
+        #empty table triggers error message
+        if not self.table:
+            return -1
         for k in self.table.keys():
             if self.table[k] == destID:
                 return k
