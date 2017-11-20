@@ -7,7 +7,7 @@
 """
 import random as rd
 import ssl
-import base64
+import json
 from cryptography.fernet import Fernet
 random_function = ssl.RAND_bytes
 
@@ -21,19 +21,25 @@ random_function = ssl.RAND_bytes
         3.  use key for subsequent encryption layers (the "onion")
 """
 
-# returns a string so it can be encoded by rsa
 def generate_fernet_key():
-    return str(Fernet.generate_key())
+    return Fernet.generate_key()
 
+# cipher takes bytes as arg, so some format manipulation is needed
+# dict -> json -> bytes -> str
 def encrypt_fernet(message, key):
-    k = bytes(key)
-    cipher_suite = Fernet(k)
-    return cipher_suite.encrypt(message.encrypted)
+    cipher_suite = Fernet(key)
+    message_json = json.dumps(message)
+    message_enc = cipher_suite.encrypt(message_json.encode('utf-8'))
+    test = message_enc.decode('utf-8')
+    return test
 
+# str -> bytes -> json -> dict
 def decrypt_fernet(message, key):
-    k = bytes(key)
-    cipher_suite = Fernet(k)
-    return cipher_suite.decrypt(message.encrypted)
+    cipher_suite = Fernet(key)
+    message_str = message.decode('utf-8')
+    message_bytes = cipher_suite.decrypt(message_str)
+    test = json.loads(message_bytes.encode('utf-8'))
+    return test
 
 
 """
@@ -124,13 +130,12 @@ def get_private_key_rsa():
     rsa_keys["private"] = private_exp
     return rsa_keys
 
-
+# only using RSA to encode a byte key
 def encrypt_RSA(message, e, n):
-    return pow(convertTextToNumber(message), int(e), int(n))
-
+    return pow(convertKeyToNumber(message), int(e), int(n))
 
 def decrypt_RSA(ciphertext, d, n):
-    return convertNumberToText(pow(ciphertext, int(d), int(n)))
+    return convertNumberToKey(pow(ciphertext, int(d), int(n)))
 
 #https://en.wikibooks.org/wiki/Algorithm_Implementation/Mathematics/Extended_Euclidean_algorithm
 def xgcd(b, n):
@@ -149,9 +154,15 @@ def mulinv(b, n):
         return x % n
 
 
+def convertKeyToNumber(message):
+    return int.from_bytes(message, 'little')
+
+def convertNumberToKey(number):
+    return number.to_bytes((number.bit_length() + 7) // 8, 'little')
+
+
 def convertTextToNumber(message):
     return int.from_bytes(message.encode('utf-8'), 'little')
-
 
 def convertNumberToText(number):
     return number.to_bytes((number.bit_length() + 7) // 8, 'little').decode('utf-8')
