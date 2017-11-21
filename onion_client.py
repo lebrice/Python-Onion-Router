@@ -23,11 +23,8 @@ DEFAULT_TIMEOUT = 1
 socket.setdefaulttimeout(None)
 
 
-
-
-class OnionClient(Thread):
+class OnionClient():
     def __init__(self, ip, port, number_of_nodes):
-        super().__init__()
         self.initialized = False
         self.ip = ip
         self.port = port
@@ -51,42 +48,13 @@ class OnionClient(Thread):
         self._contact_dir_node(dir_ip, dir_port)
         self._build_circuit()
         self.initialized = True
-        self.running = False
-
-    def run(self):
-        self.running = True
-
-        if self.initialized:
-            with socket.socket() as receiving_socket:
-                receiving_socket.settimeout(DEFAULT_TIMEOUT)
-                receiving_socket.bind((self.ip, self.port))
-                receiving_socket.listen()
-                while self.running:
-                    # Wait for the next message to arrive.
-                    try:
-                        client_socket, address = receiving_socket.accept()
-
-                        # TODO check received packet and remove layers here
-                        # client_thread = ns.NodeSwitchboard(client_socket, address,
-                        #                                    self.circuit_table,
-                        #                                    self.node_key_table,
-                        #                                    self.node_relay_table,
-                        #                                    self.rsa_keys)
-                        # client_thread.start()
-                    except socket.timeout:
-                        continue
-        else:
-            print("ERROR    Client not initialized. Call .connect() first")
-
-    def stop(self):
-        self.running = False
 
     def send(self, url):
         """
             called from exterior to tell client to send message through the circuit
         """
         if not self.initialized:
-            raise OnionRuntimeError("ERROR     Client not initialized. Call .connect() first.\n")
+            raise OnionRuntimeError("ERROR, Client not initialized. Call .connect() first.\n")
 
         self.send_through_circuit(url)
 
@@ -101,7 +69,6 @@ class OnionClient(Thread):
             this avoids the problem of the client using itself as a node later on
 
         """
-
         pkt = pm.new_dir_packet("dir_query", 0, 0)
         message = None
 
@@ -152,57 +119,19 @@ class OnionClient(Thread):
 
     def _build_circuit(self):
         nodes = self._select_random_nodes()
-        if nodes == -1:
-            return
 
         # will always send the packet through the first node to reach the others
         entry_node = nodes[0]
 
-        self.client_socket.connect((entry_node['ip'], entry_node['port']))
-
-        # first link is special: only one to get control "create" packet
-        destID = self._generate_new_circID()
-        self.entry_circID = destID
-        self.circuit_table.add_circuit_entry(
-            entry_node['ip'],
-            entry_node['port'],
-            destID)
-        self.sender_key_table.add_key_entry(destID, i, k)
-        payload = pm.new_payload(self.ip, self.port, ciphered_shared_key)
-
-        # Create the custom control packet
-        pkt = pm.new_control_packet(destID, "create", payload)
-
-        # send first half of key exchange
-        client_socket.sendall(pkt.encode())
-
-        # Obtain a response packet
-        rec_bytes = client_socket.recv(BUFFER_SIZE)
-        message = json.loads(rec_bytes.decode())
-
-        if message == -1 or message['command'] != 'created':
-            raise OnionRuntimeError(
-                "ERROR    Did not receive expected confirmation packet\n"
-            )
-            print("         Circuit building exiting. . .")
-
-        # received "created" packet successfully -- store info in tables
-        # TODO check return value. right now created packets are filled with junk
-        self.sender_key_table.add_key_entry(destID, 0, k)
-
-        # store connection to first circID, the entry point to the circuit
-        self.circuit_table.add_circuit_entry(
-            nodes[0]['ip'],
-            nodes[0]['port'],
-            destID)
-
+        # NOTE: This should be the ONLY place where we create this socket.
+        self._create(entry_node['ip'], entry_node['port'])
         # --- DONE WITH FIRST NODE
 
         # --- For all the other nodes:
         for i in range(1, len(nodes)):
-            k = enc.generate_fernet_key()
+            key = enc.generate_fernet_key()
             ciphered_shared_key = enc.encrypt_RSA(
-                k,
+                key,
                 nodes[i]['public_exp'],
                 nodes[i]['modulus'])
 
@@ -214,19 +143,14 @@ class OnionClient(Thread):
                 ciphered_shared_key)
 
             # apply layers of encryption on shared key + key exchange before sending it
-            # e.g. for node 2, apply layer 1 then layer 0
-            encryption_layer = i-1
-            while(encryption_layer >= 0):
-                layer = self.sender_key_table.get_key(destID, encryption_layer)
-                encrypted_data = enc.encrypt_fernet(encrypted_data, layer)
-                encryption_layer -= 1
+            encrypted_data = self.successive_encrypt(encrypted_data)
 
             pkt = pm.new_relay_packet(destID, "extend", encrypted_data)
 
             # send first half of key exchange
-            client_socket.sendall(pkt.encode())
+            self.client_socket.sendall(pkt.encode())
 
-            rec_bytes = client_socket.recv(BUFFER_SIZE)
+            rec_bytes = self.client_socket.recv(BUFFER_SIZE)
             message = json.loads(rec_bytes.decode())
 
             if message == -1 or (message['command'] != 'created' and message['command'] != 'extended'):
@@ -237,7 +161,7 @@ class OnionClient(Thread):
 
             # received "created" or "extended packet successfully -- store info in tables
             # TODO check return value. right now created packets are filled with junk
-            self.sender_key_table.add_key_entry(destID, i, k)
+            self.sender_key_table.add_key_entry(destID, i, key)
 
             # store connection to first circID, the entry point to the circuit
             if (i == 0):
@@ -249,6 +173,55 @@ class OnionClient(Thread):
         for i in range(1, self.number_of_nodes):
             layer = self.sender_key_table.get_key(self.entry_circID, i)
             payload = enc.decrypt_fernet(payload, layer)
+
+    def _send_create_packet(entry_node):
+        assert self.client_socket is not None
+        # first link is special: only one to get control "create" packet
+
+        key = enc.generate_fernet_key()
+        ciphered_shared_key = enc.encrypt_RSA(
+            key,
+            entry_node['public_exp'],
+            entry_node['modulus'])
+
+        destID = self._generate_new_circID()
+        self.entry_circID = destID
+        self.circuit_table.add_circuit_entry(
+            entry_node['ip'],
+            entry_node['port'],
+            destID)
+
+        key = enc.generate_fernet_key()
+        self.sender_key_table.add_key_entry(destID, i, key)
+        payload = pm.new_payload(self.ip, self.port, ciphered_shared_key)
+
+        # Create the custom control packet
+        pkt = pm.new_control_packet(destID, "create", payload)
+
+        # send first half of key exchange
+        self.client_socket.sendall(pkt.encode())
+
+        # Obtain a response packet
+        rec_bytes = self.client_socket.recv(BUFFER_SIZE)
+        message = json.loads(rec_bytes.decode())
+
+        if message == -1 or message['command'] != 'created':
+            raise OnionRuntimeError(
+                "ERROR    Did not receive expected confirmation packet\n"
+            )
+            print("         Circuit building exiting. . .")
+
+        # received "created" packet successfully -- store info in tables
+        # TODO check return value. right now created packets are filled with junk
+        self.sender_key_table.add_key_entry(destID, 0, key)
+
+        # store connection to first circID, the entry point to the circuit
+        self.circuit_table.add_circuit_entry(
+            entry_node['ip'],
+            entry_node['port'],
+            destID)
+
+
 
     def send_through_circuit(self, message):
         """
@@ -276,22 +249,13 @@ class OnionClient(Thread):
             encrypted_data)
         self._send(pkt)
 
-    def receive_from_circuit(self, client_socket):
-        rec_bytes = client_socket.recv(BUFFER_SIZE)
-        #message_str = rec_bytes.decode('utf-8')
-        message = json.loads(rec_bytes.decode("UTF-8"))
-
-        layer = self.sender_key_table.get_key(self.entry_circID, 0)
-        payload = enc.decrypt_fernet(message['encrypted_data'], layer)
-        for i in range(1, self.number_of_nodes):
-            layer = self.sender_key_table.get_key(self.entry_circID, i)
-            payload = enc.decrypt_fernet(payload, layer)
-        payload = base64.urlsafe_b64decode(payload['data']).decode("UTF-8")
+    def receive_from_circuit(self):
+        rec_bytes = self.client_socket.recv(BUFFER_SIZE)
+        message_str = rec_bytes.decode('utf-8')
+        message = json.loads(message_str)
+        decrypted = self.successive_decrypt(message['encrypted_data'])
+        payload = base64.urlsafe_b64decode(decrypted['data']).decode("UTF-8")
         return payload
-
-    def _create(self, ip, port):
-        self.client_socket = socket.socket()
-        self.client_socket.connect((ip, port))
 
     def _send(self, message_str):
         message_bytes = message_str.encode('utf-8')
