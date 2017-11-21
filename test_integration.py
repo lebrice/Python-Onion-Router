@@ -1,5 +1,8 @@
 #!/usr/bin/python3
 """ Integration testing """
+import json
+import socket
+import threading
 import unittest
 
 import node
@@ -15,8 +18,10 @@ class IntegrationTestCase(unittest.TestCase):
         self._setup_network()
         self._start_all()
 
-        self.website = SocketReader(12351)
-        self.website.start()
+    def tearDown(self):
+        self._stop_all()
+        self.website.stop()
+
 
     def _setup_network(self):
         self.directory_node, self.onion_nodes = generate_nodes(
@@ -29,14 +34,54 @@ class IntegrationTestCase(unittest.TestCase):
         for node in self.onion_nodes:
             node.start()
 
-    def tearDown(self):
-        self._stop_all()
-        self.website.stop()
-
     def _stop_all(self):
         for node in self.onion_nodes:
             node.stop()
         self.directory_node.stop()
+
+
+class TestingWebsite(threading.Thread):
+    """
+    Represents a website that listens for requests.
+    """
+    def __init__(self, port):
+        super().__init__()
+        self.port = port
+        self.running = False
+
+        self.received_messages = []
+
+    def start(self):
+        self.running = True
+        super().start()
+
+    def run(self):
+        with socket.socket() as _socket:
+            _socket.settimeout(1)
+            _socket.bind((socket.gethostname(), self.port))
+            _socket.listen()
+
+            while self.running:
+                try:
+                    client_socket, address = _socket.accept()
+
+                    done = False
+                    received_chunks = []
+                    while not done:
+                        new_bytes = client_socket.recv(1024)
+                        done = (new_bytes == b'')
+                        received_chunks.append(new_bytes)
+
+                    received_bytes = b''.join(received_chunks)
+                except socket.timeout:
+                    continue
+
+    def stop(self):
+        self.running = False
+
+
+
+
 
 
 def generate_nodes(onion_node_count=10, starting_port=12345):
