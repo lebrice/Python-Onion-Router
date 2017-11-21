@@ -290,15 +290,6 @@ class OnionClient(Thread):
         return payload
 
     def _create(self, ip, port):
-        if self.client_socket is None:
-            self.client_socket = socket.socket()
-
-        if self.target_ip == ip and self.target_port == port
-            self.client_socket
-
-    def _create(self, ip, port):
-        if self.client_socket is not None:
-            raise OnionRuntimeError("Don't create twice without closing!")
         self.client_socket = socket.socket()
         self.client_socket.connect((ip, port))
 
@@ -308,7 +299,15 @@ class OnionClient(Thread):
 
     def _close(self):
         self.client_socket.close()
-    
+        self.client_socket = None
+
+    def _create(self, ip, port):
+        if self.client_socket is not None:
+            raise OnionRuntimeError("Don't create twice without closing!")
+
+        self.client_socket = socket.socket()
+        self.client_socket.connect((ip, port))
+
     def successive_encrypt(self, message):
         """
         apply three encryption layers to message
