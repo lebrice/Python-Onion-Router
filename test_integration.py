@@ -56,13 +56,39 @@ class IntegrationTestCase(unittest.TestCase):
         client = OnionClient(DIR_IP, CLIENT_PORT, NODE_COUNT)
         client.connect(DIR_IP, DIR_PORT)
 
-        # TODO: fix this, such that the separate return call is used.
-        response = client.send_through_circuit(url)
-        # response = client.receive_from_circuit() 
+        # TODO: Update onion_client, such that the separate return call is used.
+        client.send_through_circuit(url)
 
-        expected_received_at_website = b"GET / HTTP/1.1\r\nAccept-Encoding: identity\r\nConnection: close\r\nHost: " + DIR_IP +":80\r\nUser-Agent: Python-urllib/3.5\r\n\r\n"
+        self.assertNotEqual(
+            len(self.website.received_messages),
+            0,
+            "the website's list of received messages should not be empty")
 
-        self.assertEqual(expected_received_at_website, self.website.received_messages[0])
+        expected_received_at_website = b"GET / HTTP/1.1\r\nAccept-Encoding: identity\r\nConnection: close\r\nHost: " + DIR_IP.encode() + b":80\r\nUser-Agent: Python-urllib/3.5\r\n\r\n"
+        actual_received_at_website = self.website.received_messages[0]
+
+        self.assertEqual(
+            expected_received_at_website,
+            actual_received_at_website,
+            "The website didn't receive what the client originally sent!")
+
+    def test_receive_from_circuit_works(self):
+        """
+        tests that what is received from the circuit is the same as what the
+        website originally sent.
+        """
+        time.sleep(0.5)  # Give enough time for the local network to be setup
+
+        url = "{}:{}".format(WEBSITE_IP, WEBSITE_PORT)
+        self.website.reply_message = "HI THERE"
+
+        client = OnionClient(DIR_IP, CLIENT_PORT, NODE_COUNT)
+        client.connect(DIR_IP, DIR_PORT)
+
+        # TODO: Update onion_client, such that the separate return call is used.
+        client.send_through_circuit(url)
+
+        response = client.receive_from_circuit()
         self.assertEqual(response, self.website.reply_message)
 
 
@@ -106,6 +132,8 @@ class TestingWebsite(threading.Thread):
                         client_socket.sendall(self.reply_message.encode())
 
                     client_socket.close()
+
+                    self.received_messages.append(received_bytes)
 
                 except socket.timeout:
                     continue
