@@ -119,6 +119,13 @@ class OnionClient():
 
     def _build_circuit(self):
         nodes = self._select_random_nodes()
+        
+        self._send_create_packet(nodes[0])
+        for node in nodes[1:]:
+            self._send_extend_packet(node)
+        
+        # DONE. (TODO: move what's left to other methods for clarity.)
+        return
 
         # will always send the packet through the first node to reach the others
         entry_node = nodes[0]
@@ -192,7 +199,7 @@ class OnionClient():
             destID)
 
         key = enc.generate_fernet_key()
-        self.sender_key_table.add_key_entry(destID, i, key)
+        self.sender_key_table.add_key_entry(destID, 0, key)
         payload = pm.new_payload(self.ip, self.port, ciphered_shared_key)
 
         # Create the custom control packet
@@ -212,20 +219,21 @@ class OnionClient():
             print("         Circuit building exiting. . .")
 
         # received "created" packet successfully -- store info in tables
-        # TODO check return value. right now created packets are filled with junk
-        self.sender_key_table.add_key_entry(destID, 0, key)
-
         # store connection to first circID, the entry point to the circuit
         self.circuit_table.add_circuit_entry(
             entry_node['ip'],
             entry_node['port'],
             destID)
 
-
+    def _send_extend_packet(self, node):
+        """
+        TODO: Take out the logic from circuit building, make it simpler.
+        """
+        raise NotImplementedError()
 
     def send_through_circuit(self, message):
         """
-            called from exterior to tell client to send message through the circuit
+        called from exterior to tell client to send message through the circuit
         """
         if not self.initialized:
             raise OnionRuntimeError(
