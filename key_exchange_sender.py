@@ -40,8 +40,9 @@ class KeyExchangeSender(Thread):
             return
         public_key = json_public_keys["public_key"]
         modulus = json_public_keys["modulus"]
-        #generate random shared key, length of 16 (constant for now)
-        #generate circuit id, not currently used
+
+        # generate random shared key, length of 16 (constant for now)
+        # generate circuit id, not currently used
         shared_key = ''.join(random.SystemRandom().choice(string.ascii_uppercase + string.digits) for _ in range(16))
         ciphered_shared_key = RSA.encrypt_RSA(shared_key, public_key, modulus)
         circuit_id = 0

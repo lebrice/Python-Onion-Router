@@ -18,8 +18,8 @@ class SimpleAdditionEncriptorTestCase(unittest.TestCase):
     def test_wrong_key_does_not_decrypt_message(self):
         message = "Some private message"
         wrongKey = self.key + 1231  # some other key
-        encrypted = SimpleAdditionEncriptor.encrypt(message, self.key)
-        decrypted = SimpleAdditionEncriptor.decrypt(encrypted, wrongKey)
+        encrypted = SimpleAdditionEncryptor.encrypt(message, self.key)
+        decrypted = SimpleAdditionEncryptor.decrypt(encrypted, wrongKey)
         self.assertNotEqual(message, decrypted)
 
 

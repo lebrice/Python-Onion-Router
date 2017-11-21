@@ -9,11 +9,23 @@ import time
 from node import OnionNode
 from errors import OnionSocketError, OnionNetworkError
 
-from encryption import *
-from messaging import *
+import sender_circuit_builder as scb
+import circuit_tables as ct
+import RSA
 
-# TODO: create a new private key for each OnionSocket
-DEFAULT_PRIVATE_KEY = 164
+BUFFER_SIZE = 1024 # Constant for now
+DEFAULT_TIMEOUT = 1
+NUMBER_OF_NODES = 3
+
+@contextmanager
+def socket(onion_node=None):
+    if onion_node is None:
+        onion_node = OnionNode("my_node", 12350)
+    onion_socket = OnionSocket(onion_node)
+    try:
+        yield onion_socket
+    finally:
+        onion_socket.close()
 
 
 @contextmanager
@@ -29,7 +41,6 @@ def socket(onion_node=None):
 
 class OnionSocket():
     def __init__(self, onion_node=None):
-        # TODO: change this private key for each node.
         self.target_ip = None
         self.target_port = None
         if onion_node is None:
@@ -37,10 +48,15 @@ class OnionSocket():
         else:
             self.node = onion_node
 
-        # TODO: Need to initialize the node properly.
-        self.node.start()
-        while(self.node.initialized is not True):
-            time.sleep(0.1)  # Thread.yield() equivalent, kindof
+        self.circuit_table = ct.circuit_table()
+        self.sender_key_table = ct.sender_key_table()
+
+        self._build_circuit()
+
+        # # TODO: Need to initialize the node properly.
+        # self.node.start()
+        # while(self.node.initialized is not True):
+        #     time.sleep(0.1)  # Thread.yield() equivalent, kindof
 
     @staticmethod
     def socket(onion_node=None):
@@ -62,10 +78,10 @@ class OnionSocket():
     def send(self, data: bytes):
         """ Sends the given data to the remote host through the OnionSocket.
         """
-        if not self.connected:
-            raise OnionSocketError("Onion network has not been initialized.")
-        message = self._create_message(data)
-        self.node.send_message(message)
+        # if not self.connected:
+        #     raise OnionSocketError("Onion network has not been initialized.")
+        # #message = self._create_message(data)
+        # self.node.send_message(message)
 
     def recv(self, buffer_size):
         """ Receives the given number of bytes from the Onion socket.
@@ -78,63 +94,31 @@ class OnionSocket():
         self.node.stop()
 
     def _select_three_random_neighbours(self):
-        if len(self.node.neighbours) < 3:
-            message = f"There are currently not enough nodes for an onion" + \
-                f"network to exist. (current: {len(self.node.neighbours)}<3)"
+        if len(self.node.network_list) < 3:
+            message = "There are currently not enough nodes for an onion" + \
+                "network to exist. (current: {len(self.node.neighbours)}<3)"
             raise OnionNetworkError(message)
-        return random.sample(self.node.neighbours, 3)
+        return random.sample(self.node.network_list['nodes in network'], 3)
 
-    def _create_message(self, data):
-        """ Creates a message, to be send accross the OnionNetwork.
+    def _build_circuit(self):
+        node1, node2, node3 = self._select_three_random_neighbours()
+        nodes = [node1, node2, node3]
+        builder = scb.SenderCircuitBuilder(nodes, self.circuit_table, self.sender_key_table)
+        builder.start()
+        builder.join()
 
-        NOTE: At the moment, it does
 
-            ME ---> A ---> B ---> C ---> EXIT
-        
-        """
-        ME = (socket.gethostname(), self.node._receiving_port)
-        A, B, C = self._select_three_random_neighbours()
-        EXIT = (self.target_ip, self.target_port)
 
-        keys = [self.node.shared_secrets.get(n) for n in [A, B, C]]
-        # key_a = self.node.shared_secrets.get(A)
-        # key_a = self.node.shared_secrets.get(A)
-        # key_a = self.node.shared_secrets.get(A)
-        key_a, key_b, key_c = keys
+    def _create(self, ip, port):
+        self.client_socket = socket.socket(DEFAULT_TIMEOUT)
+        self.client_socket.connect((ip, port))
 
-        # TODO: Replace with whichever encryptor makes the most sense.
-        encryptor = DoNothingEncryptor
+    def _send(self, message_str):
+        message_bytes = message_str.encode('utf-8')
+        self.client_socket.sendall(message_bytes)
 
-        # NOTE: This is just pseudocode. We might use a very different approach
-        exit_message = OnionMessage(
-            header="EXIT",
-            source=C,
-            destination=EXIT,
-            # TODO: the data between C and the Website needs to be encrypted!
-            data=data
-        )
-        message3 = OnionMessage(
-            header="RELAY",
-            source=B,
-            destination=C,
-            data=encryptor.encrypt(exit_message.to_json_string(), key_c)
-        )
-        message2 = OnionMessage(
-            header="RELAY",
-            source=A,
-            destination=B,
-            data=encryptor.encrypt(message3.to_json_string(), key_b)
-        )
-        message1 = OnionMessage(
-            header="RELAY",
-            source=ME,
-            destination=A,
-            data=encryptor.encrypt(message2.to_json_string(), key_a)
-        )
-        print("\nexit_message:", exit_message)
-        print("\nmessage3", message3)
-        print("\nmessage2", message2)
-        print("\nmessage1", message1)
-        return message1
+    def _close(self):
+        self.client_socket.close()
+
 
 
