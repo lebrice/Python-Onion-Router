@@ -28,6 +28,17 @@ def socket(onion_node=None):
         onion_socket.close()
 
 
+@contextmanager
+def socket(onion_node=None):
+    if onion_node is None:
+        onion_node = OnionNode("my_node", 12350)
+    onion_socket = OnionSocket(onion_node)
+    try:
+        yield onion_socket
+    finally:
+        onion_socket.close()
+
+
 class OnionSocket():
     def __init__(self, onion_node=None):
         self.target_ip = None

@@ -3,6 +3,7 @@
 import unittest
 from threading import Thread
 import socket
+import sys
 import time
 import json
 
@@ -134,6 +135,48 @@ class IntermediateRelayTestCase(unittest.TestCase):
         expected = sent_obj['value'] ** 2
         actual = received_obj['value']
         self.assertEqual(expected, actual)
+
+    def test_closing_a_eventually_closes_d(self):
+        test_message = """{"value": 10}"""
+
+        relay = IntermediateRelay(
+            self.socket_b,
+            self.socket_c
+        )
+        relay.start()
+
+        self.socket_a.close()
+        time.sleep(0.2)
+        self.assert_is_closed(self.socket_d)
+
+    def test_closing_d_eventually_closes_a(self):
+        test_message = """{"value": 10}"""
+
+        relay = IntermediateRelay(
+            self.socket_b,
+            self.socket_c
+        )
+        relay.start()
+
+        self.socket_d.close()
+        time.sleep(0.2)
+        self.assert_is_closed(self.socket_a)
+
+    def assert_is_closed(self, _socket):
+        import sys
+        if sys.platform == "linux":
+            # On Linux, if we receive the empty string, the socket is "closed."
+            received = _socket.recv(1024)
+            self.assertEqual(received, b'')
+
+        elif sys.platform == "win32":
+            # On Windows, we get a ConnectionResetError.
+            with self.assertRaises(ConnectionResetError):
+                received = _socket.recv(1024)
+
+        else:
+            print("""WARNING, please add how the socket is supposed to be
+            detected to be closed for your platform here.""")
 
 
 def double_value(message):

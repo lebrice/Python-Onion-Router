@@ -13,3 +13,7 @@ class OnionSocketError(OnionError):
 
 class OnionNetworkError(OnionError):
     pass
+
+
+class OnionRuntimeError(OnionError):
+    pass
