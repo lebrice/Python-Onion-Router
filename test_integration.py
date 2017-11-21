@@ -12,12 +12,16 @@ from onion_client import OnionClient
 
 from node import DirectoryNode, OnionNode
 
-STARTING_PORT = 12345
+STARTING_PORT = 50000
 NODE_COUNT = 3
 
 DIR_IP = socket.gethostname()
 DIR_PORT = STARTING_PORT
 
+CLIENT_PORT = 55555
+
+WEBSITE_IP = socket.gethostname()
+WEBSITE_PORT = 80
 
 class IntegrationTestCase(unittest.TestCase):
     """
@@ -25,10 +29,7 @@ class IntegrationTestCase(unittest.TestCase):
     """
     def setUp(self):
 
-        self.directory_node, self.onion_nodes = generate_nodes(
-            onion_node_count=NODE_COUNT,
-            starting_port=STARTING_PORT
-        )
+        self.directory_node, self.onion_nodes = generate_nodes()
         
         self.directory_node.start()
         for node in self.onion_nodes:
@@ -36,7 +37,7 @@ class IntegrationTestCase(unittest.TestCase):
             node.start()
         
         # Start the test website, that listens on port 80.
-        self.website = TestingWebsite(port=80)
+        self.website = TestingWebsite(port=WEBSITE_PORT)
         self.website.start()
 
     def tearDown(self):
@@ -45,22 +46,21 @@ class IntegrationTestCase(unittest.TestCase):
             node.stop()
         self.directory_node.stop()
 
-    def test_directory_node_builds_list_correctly(self):
+    def test_message_is_correctly_received_by_website(self):
         time.sleep(0.5)  # Give enough time for the local network to be setup
 
-        url = "www.perdu.com"
+        url = "{}:{}".format(WEBSITE_IP, WEBSITE_PORT)
+        self.website.reply_message = "HI THERE"
 
-        client = OnionClient(DIR_IP, 55555, NODE_COUNT)
+        client = OnionClient(DIR_IP, CLIENT_PORT, NODE_COUNT)
         client.connect(DIR_IP, DIR_PORT)
-        #client.start()
 
-        print("#####REQUESTING#####")
-        will = client.send_through_circuit(url)
-        filename = 'returned.html'
-        _write_to_html(filename, will)
+        # TODO: fix this, such that the separate return call is used.
+        client.send_through_circuit(url)
+        
+        response = client.receive_from_circuit()
 
-        webbrowser.get().open('file://' + os.path.realpath(filename), 1)
-        #client.send("hello")
+        self.assertEqual(response, self.website.reply_message)
 
 
 class TestingWebsite(threading.Thread):
@@ -73,6 +73,8 @@ class TestingWebsite(threading.Thread):
         self.running = False
 
         self.received_messages = []
+
+        self.reply_message = ""
 
     def start(self):
         self.running = True
@@ -96,6 +98,10 @@ class TestingWebsite(threading.Thread):
                         received_chunks.append(new_bytes)
 
                     received_bytes = b''.join(received_chunks)
+
+                    if self.reply_message:
+                        client_socket.sendall(self.reply_message.encode())
+
                 except socket.timeout:
                     continue
 
@@ -103,17 +109,15 @@ class TestingWebsite(threading.Thread):
         self.running = False
 
 
-def generate_nodes(onion_node_count=10, starting_port=12345):
+def generate_nodes():
     """Generates a directory node and some onion nodes.
 
     Returns: (DirectoryNode, List[OnionNode])
     """
-    directory_node = DirectoryNode(ip=socket.gethostname(), port=starting_port)
+    directory_node = DirectoryNode(ip=DIR_IP, port=DIR_PORT)
     onion_nodes = []
-    for i in range(onion_node_count):
-        node_name = "ONION_NODE_{}".format(i)
-        node_receiving_port = starting_port + i
-        node_private_key = 127 + i  # Some lousy private key.
+    for i in range(NODE_COUNT):
+        node_receiving_port = STARTING_PORT + i + 1
         node = OnionNode(ip=socket.gethostname(), port=node_receiving_port)
         onion_nodes.append(node)
 
