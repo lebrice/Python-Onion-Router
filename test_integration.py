@@ -23,6 +23,7 @@ CLIENT_PORT = 55555
 WEBSITE_IP = socket.gethostname()
 WEBSITE_PORT = 80
 
+
 class IntegrationTestCase(unittest.TestCase):
     """
     Integration Tests for the Onion Network.
@@ -46,7 +47,7 @@ class IntegrationTestCase(unittest.TestCase):
             node.stop()
         self.directory_node.stop()
 
-    def test_message_is_correctly_received_by_website(self):
+    def test_send_through_circuit_works(self):
         time.sleep(0.5)  # Give enough time for the local network to be setup
 
         url = "{}:{}".format(WEBSITE_IP, WEBSITE_PORT)
@@ -56,10 +57,12 @@ class IntegrationTestCase(unittest.TestCase):
         client.connect(DIR_IP, DIR_PORT)
 
         # TODO: fix this, such that the separate return call is used.
-        client.send_through_circuit(url)
-        
-        response = client.receive_from_circuit()
+        response = client.send_through_circuit(url)
+        # response = client.receive_from_circuit() 
 
+        expected_received_at_website = b"GET / HTTP/1.1\r\nAccept-Encoding: identity\r\nConnection: close\r\nHost: " + DIR_IP +":80\r\nUser-Agent: Python-urllib/3.5\r\n\r\n"
+
+        self.assertEqual(expected_received_at_website, self.website.received_messages[0])
         self.assertEqual(response, self.website.reply_message)
 
 
@@ -96,11 +99,13 @@ class TestingWebsite(threading.Thread):
                         new_bytes = client_socket.recv(1024)
                         done = (new_bytes == b'')
                         received_chunks.append(new_bytes)
-
+                        print("WEBSITE RECEIVED: ", new_bytes)
                     received_bytes = b''.join(received_chunks)
 
                     if self.reply_message:
                         client_socket.sendall(self.reply_message.encode())
+
+                    client_socket.close()
 
                 except socket.timeout:
                     continue
