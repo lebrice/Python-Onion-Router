@@ -3,11 +3,20 @@
 import json
 import socket
 import threading
+import time
 import unittest
 
 import node
+import onion_client
+from onion_client import OnionClient
 
 from node import DirectoryNode, OnionNode
+
+STARTING_PORT = 12345
+NODE_COUNT = 3
+
+DIR_IP = socket.gethostname()
+DIR_PORT = STARTING_PORT
 
 
 class IntegrationTestCase(unittest.TestCase):
@@ -15,15 +24,19 @@ class IntegrationTestCase(unittest.TestCase):
     Integration Tests for the Onion Network.
     """
     def setUp(self):
-        self.directory_node, self.onion_nodes = generate_nodes(
-            onion_node_count=3,
-            starting_port=12345
-        )
-        self.website = TestingWebsite(port=80)
 
+        self.directory_node, self.onion_nodes = generate_nodes(
+            onion_node_count=NODE_COUNT,
+            starting_port=STARTING_PORT
+        )
+        
         self.directory_node.start()
         for node in self.onion_nodes:
+            node.connect(DIR_IP, DIR_PORT)
             node.start()
+        
+        # Start the test website, that listens on port 80.
+        self.website = TestingWebsite(port=80)
         self.website.start()
 
     def tearDown(self):
@@ -31,6 +44,23 @@ class IntegrationTestCase(unittest.TestCase):
         for node in self.onion_nodes:
             node.stop()
         self.directory_node.stop()
+
+    def test_directory_node_builds_list_correctly(self):
+        time.sleep(0.5)  # Give enough time for the local network to be setup
+
+        url = "www.perdu.com"
+
+        client = OnionClient(dir_ip, 55555, args.node_count)
+        client.connect(dir_ip, dir_port)
+        #client.start()
+
+        print("#####REQUESTING#####")
+        will = client.send_through_circuit(url)
+        filename = 'returned.html'
+        _write_to_html(filename, will)
+
+        webbrowser.get().open('file://' + os.path.realpath(filename), 1)
+        #client.send("hello")
 
 
 class TestingWebsite(threading.Thread):
