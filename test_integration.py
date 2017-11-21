@@ -50,8 +50,8 @@ class IntegrationTestCase(unittest.TestCase):
 
         url = "www.perdu.com"
 
-        client = OnionClient(dir_ip, 55555, args.node_count)
-        client.connect(dir_ip, dir_port)
+        client = OnionClient(DIR_IP, 55555, NODE_COUNT)
+        client.connect(DIR_IP, DIR_PORT)
         #client.start()
 
         print("#####REQUESTING#####")
