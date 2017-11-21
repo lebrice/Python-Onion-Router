@@ -15,26 +15,19 @@ class IntegrationTestCase(unittest.TestCase):
     Integration Tests for the Onion Network.
     """
     def setUp(self):
-        self._setup_network()
-        self._start_all()
-
-    def tearDown(self):
-        self._stop_all()
-        self.website.stop()
-
-
-    def _setup_network(self):
         self.directory_node, self.onion_nodes = generate_nodes(
             onion_node_count=3,
             starting_port=12345
         )
+        self.website = TestingWebsite(port=80)
 
-    def _start_all(self):
         self.directory_node.start()
         for node in self.onion_nodes:
             node.start()
+        self.website.start()
 
-    def _stop_all(self):
+    def tearDown(self):
+        self.website.stop()
         for node in self.onion_nodes:
             node.stop()
         self.directory_node.stop()
@@ -44,7 +37,7 @@ class TestingWebsite(threading.Thread):
     """
     Represents a website that listens for requests.
     """
-    def __init__(self, port):
+    def __init__(self, port=80):
         super().__init__()
         self.port = port
         self.running = False
@@ -78,10 +71,6 @@ class TestingWebsite(threading.Thread):
 
     def stop(self):
         self.running = False
-
-
-
-
 
 
 def generate_nodes(onion_node_count=10, starting_port=12345):
