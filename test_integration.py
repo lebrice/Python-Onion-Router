@@ -28,11 +28,11 @@ class IntegrationTestCase(unittest.TestCase):
         self.directory_node.start()
         for node in self.onion_nodes:
             node.start()
-    
+
     def tearDown(self):
         self._stop_all()
         self.website.stop()
-    
+
     def _stop_all(self):
         for node in self.onion_nodes:
             node.stop()
@@ -47,7 +47,7 @@ def generate_nodes(onion_node_count=10, starting_port=12345):
     directory_node = DirectoryNode(receiving_port=starting_port)
     onion_nodes = []
     for i in range(onion_node_count):
-        node_name = f"ONION_NODE_{i}"
+        node_name = "ONION_NODE_{}".format(i)
         node_receiving_port = starting_port + i
         node_private_key = 127 + i  # Some lousy private key.
         node = OnionNode(node_name, node_receiving_port, node_private_key)
