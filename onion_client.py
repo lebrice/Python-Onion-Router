@@ -11,11 +11,12 @@ import socket
 import json
 import time
 import packet_manager as pm
+import base64
 
 import circuit_tables as ct
 import encryption as enc
 
-BUFFER_SIZE = 1024 # Constant for now
+BUFFER_SIZE = 4096 # Constant for now
 DEFAULT_TIMEOUT = 1
 
 class OnionClient(Thread):
@@ -166,9 +167,11 @@ class OnionClient(Thread):
             if i == 0:
                 # first link is special: only one to get control "create" packet
                 destID = self._generate_new_circID()
+                self.entry_circID = destID
                 self.circuit_table.add_circuit_entry(nodes[0]['ip'], nodes[0]['port'], destID)
                 self.sender_key_table.add_key_entry(destID, i, k)
-                pkt = pm.new_control_packet(destID, "create", ciphered_shared_key)
+                payload = pm.new_payload(self.ip, self.port, ciphered_shared_key)
+                pkt = pm.new_control_packet(destID, "create", payload)
             else:
                 self._create(nodes[0]['ip'], nodes[0]['port'])
                 # data to be placed in "extend" packet payload. nodes will use circIDs to navigate,
@@ -222,9 +225,67 @@ class OnionClient(Thread):
             if (i == 0):
                 self.circuit_table.add_circuit_entry(nodes[0]['ip'], nodes[0]['port'], destID)
 
+        # remove encryption layers (from node 0 to node 2)
+        layer = self.sender_key_table.get_key(self.entry_circID, 0)
+        print("layer {}".format(layer))
+        payload = enc.decrypt_fernet(message['encrypted_data'], layer)
+        for i in range(1, self.number_of_nodes):
+            layer = self.sender_key_table.get_key(self.entry_circID, i)
+            print("payload before {}".format(payload))
+            print("layer {}".format(layer))
+            payload = enc.decrypt_fernet(payload, layer)
+            print("payload {}".format(payload))
+        print("printing junk")
+        print(payload)
         print("Built circuit successfully")
         self._close()
 
+    def send_through_circuit(self, message):
+        """
+            called from exterior to tell client to send message through the circuit
+        """
+        if not self.initialized:
+            print("ERROR     Client not initialized. Call .connect() first.\n")
+            return
+
+        # get entry point (currently fixed to only one)
+        # TODO build more circuits, select a random one in the table
+        ip, port = self.circuit_table.get_address(self.entry_circID).split(":")
+        self._create(ip, int(port))
+        print("entry circ {}".format(self.entry_circID))
+        # apply three encryption layers to message
+        # TODO put ip, port of website here if we don't want to do dns request on the exit node side
+        encrypted_data = pm.new_payload(0, 0, message)
+
+        for i in range(self.number_of_nodes - 1, -1, -1):
+            layer = self.sender_key_table.get_key(self.entry_circID, i)
+            print("layer {}".format(layer))
+            encrypted_data = enc.encrypt_fernet(encrypted_data, layer)
+
+        pkt = pm.new_relay_packet(self.entry_circID, "relay_data", encrypted_data)
+        self._send(pkt)
+        return self.receive_from_circuit(self.client_socket)
+
+    def receive_from_circuit(self, client_socket):
+        rec_bytes = client_socket.recv(BUFFER_SIZE)
+        print("receive from circuit")
+        print(rec_bytes)
+        print(rec_bytes.decode("UTF-8"))
+        #message_str = rec_bytes.decode('utf-8')
+        message = json.loads(rec_bytes.decode("UTF-8"))
+
+        layer = self.sender_key_table.get_key(self.entry_circID, 0)
+        print("layer {}".format(layer))
+        payload = enc.decrypt_fernet(message['encrypted_data'], layer)
+        for i in range(1, self.number_of_nodes):
+            layer = self.sender_key_table.get_key(self.entry_circID, i)
+            print("payload before {}".format(payload))
+            print("layer {}".format(layer))
+            payload = enc.decrypt_fernet(payload, layer)
+            print("payload {}".format(payload))
+        print("printing html")
+        payload = base64.urlsafe_b64decode(payload['data']).decode("UTF-8")
+        return payload
 
     def _create(self, ip, port):
         self.client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)

@@ -7,6 +7,8 @@ import string
 import encryption as enc
 import packet_manager as pm
 import get_request as gr
+import base64
+
 
 BUFFER_SIZE = 4096
 
@@ -27,7 +29,7 @@ class NodeSwitchboard(Thread):
                  circuit_table,
                  node_key_table,
                  node_relay_table,
-                 rsa_keys):
+                 rsa_keys, ip, port):
         super().__init__()
         self.client_socket = client_socket
         print("addr {}".format(addr))
@@ -36,6 +38,8 @@ class NodeSwitchboard(Thread):
         self.node_key_table = node_key_table
         self.node_relay_table = node_relay_table
         self.rsa_keys = rsa_keys
+        self.ip = ip
+        self.port = port
 
     def run(self):
         message_bytes = self.client_socket.recv(BUFFER_SIZE)
@@ -51,7 +55,9 @@ class NodeSwitchboard(Thread):
 
     def _relay(self, message_str, ip, port):
         client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        client_socket.connect((ip, port))
+        print("ip: {}".format(ip))
+        print("port: {}".format(port))
+        client_socket.connect((ip, int(port)))
         client_socket.sendall(message_str.encode('utf-8'))
         # wait for a response packet; 3 tries
         tries = 3
@@ -69,7 +75,9 @@ class NodeSwitchboard(Thread):
                     return
                 continue
         print("relay received {}".format(rec_bytes))
-        self._send(rec_bytes.decode('UTF-8'))
+        message_str = rec_bytes.decode('utf-8')
+        self._process_message(message_str)
+        #self._send(rec_bytes.decode('UTF-8'))
 
     def _close(self):
         #self.client_socket.shutdown(socket.SHUT_RDWR)
@@ -120,7 +128,9 @@ class NodeSwitchboard(Thread):
                     # -> create a new control packet cmd=create, send to next node
                     destID = self._generate_new_circID()
                     self.node_relay_table.add_relay_entry(message['circID'], destID)
-                    pkt = pm.new_control_packet(destID, "create", decrypted_payload['data'])
+                    self.node_relay_table.print_table()
+                    payload = pm.new_payload(self.ip, self.port, decrypted_payload['data'])
+                    pkt = pm.new_control_packet(destID, "create", payload)
 
                     #oli garbage code
                     print("extending")
@@ -133,7 +143,8 @@ class NodeSwitchboard(Thread):
                     # -> node is an exit node; make a GET request, wait for answer,
                     #    send encrypted answer back to connecting node using same key
                     print("Received message: ", decrypted_payload)
-                    ans = gr.web_request(decrypted_payload)
+                    ans = base64.urlsafe_b64encode(gr.web_request(decrypted_payload['data'])).decode("UTF-8")
+                    print(ans)
                     if ans == '':
                         print("ERROR    Could not complete get request; sending back gibberish")
                         ans = ''.join(random.SystemRandom().choice(string.ascii_uppercase + string.digits) for _ in
@@ -144,10 +155,12 @@ class NodeSwitchboard(Thread):
                     encrypted_payload = enc.encrypt_fernet(payload, key)
 
                     pkt = pm.new_relay_packet(message['circID'], "relay_ans", encrypted_payload)
+                    print(json.loads(pkt))
+                    print("GET {}".format(message['circID']))
                     ip, port = self.circuit_table.get_address(message['circID']).split(':')
                     #oli garbage
-                    #self._send(pkt)
-                    self._relay(pkt, ip, port)
+                    self._send(pkt)
+                    #self._relay(pkt, ip, port)
 
             else:
                 print("send along packet")
@@ -171,6 +184,10 @@ class NodeSwitchboard(Thread):
             # if A -> B and message was received from B and goes backwards, send it to A
             fromID = self.node_relay_table.get_from_id(message['circID'])
             key = self.node_key_table.get_key(fromID)
+            print(message['command'])
+            print("printing table")
+            print("ID {}".format(message['circID']))
+            self.node_relay_table.print_table()
             encrypted_payload = enc.encrypt_fernet(message['encrypted_data'], key)
 
             pkt = pm.new_relay_packet(fromID, message['command'], encrypted_payload)
@@ -181,9 +198,10 @@ class NodeSwitchboard(Thread):
     def _process_control(self, message):
         if message['command'] == "create":
             print("create")
+            print(message)
             # received half of a RSA key exchange
             # -> create association with sender in table, deal with keys, send back a "created" packet
-            cipher_shared_key = message['data']
+            cipher_shared_key = message['payload']['data']
             try:
                 cipher_shared_key = int(cipher_shared_key)
             except ValueError:
@@ -193,15 +211,22 @@ class NodeSwitchboard(Thread):
             shared_key = enc.decrypt_RSA(cipher_shared_key, self.rsa_keys['private'], self.rsa_keys['modulus'])
             #shared key is in bytes at this point, should decode?
             ip, port = self.addr
-            self.circuit_table.add_circuit_entry(ip, port, message['circID'])
+            self.circuit_table.add_circuit_entry(message['payload']['ip'], message['payload']['port'], message['circID'])
             self.circuit_table.print_table()
             self.node_key_table.add_key_entry(message['circID'], shared_key)
 
             # send back useless data with the same length as the shared key
             pad = ''.join(
                 random.SystemRandom().choice(string.ascii_uppercase + string.digits) for _ in range(len(shared_key)))
+            print("junk")
+            print(pad)
+            key = self.node_key_table.get_key(message['circID'])
+            print(message['command'])
+            print("printing table")
+            self.node_relay_table.print_table()
+            encrypted_payload = enc.encrypt_fernet(pad, key)
 
-            pkt = pm.new_control_packet(message['circID'], "created", pad)
+            pkt = pm.new_control_packet(message['circID'], "created", encrypted_payload)
             self._send(pkt)
             #self._sendExtend(pkt,ip,port)
 
@@ -210,7 +235,7 @@ class NodeSwitchboard(Thread):
             # -> wrap payload in "extended" packet, send it backwards
             fromID = self.node_relay_table.get_from_id(message['circID'])
             key = self.node_key_table.get_key(fromID)
-            encrypted_payload = enc.encrypt_fernet(message['data'], key)
+            encrypted_payload = enc.encrypt_fernet(message['payload'], key)
 
             pkt = pm.new_relay_packet(fromID, "extended", encrypted_payload)
             ip, port = self.circuit_table.get_address(fromID).split(':')

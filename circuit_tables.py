@@ -115,6 +115,7 @@ class node_key_table():
 
     def print_table(self):
         for k in self.table.keys():
+            print(k)
             print(self.table[k])
 
 
@@ -163,5 +164,8 @@ class node_relay_table():
         return len(self.table)
 
     def print_table(self):
+        print("Printing node relay table")
         for k in self.table.keys():
+            print(k)
             print(self.table[k])
+        print("done")

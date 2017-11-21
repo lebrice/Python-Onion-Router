@@ -19,7 +19,7 @@ def new_control_packet(circID, command, data):
         'type' : "control",
         'circID': circID,
         'command': command,
-        'data': data
+        'payload': data
     })
 
 
@@ -81,6 +81,19 @@ def new_relay_packet(circID, command, encrypted_data):
 
 
 def new_relay_payload(ip, port, data):
+    """
+    list used for relay packet payload
+    contains the part of the relay packet that needs to be encrypted
+    """
+
+    return {'isDecrypted': True,
+            'ip': ip,
+            'port': port,
+            'data': data
+    }
+
+
+def new_payload(ip, port, data):
     """
     list used for relay packet payload
     contains the part of the relay packet that needs to be encrypted

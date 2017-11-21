@@ -63,7 +63,7 @@ class OnionNode(threading.Thread):
                                                            self.circuit_table,
                                                            self.node_key_table,
                                                            self.node_relay_table,
-                                                           self.rsa_keys)
+                                                           self.rsa_keys, self.ip, self.port)
                         client_thread.start()
                     except socket.timeout:
                         continue
