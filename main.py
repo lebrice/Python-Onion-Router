@@ -49,6 +49,7 @@ if __name__ == "__main__":
     client = oc.OnionClient('127.0.0.1', 54320, args.node_count)
     client.connect(dir_ip, dir_port)
     #client.start()
+
     print("#####REQUESTING#####")
     will = client.send_through_circuit(args.url)
     filename = 'returned.html'

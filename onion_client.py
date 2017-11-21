@@ -122,7 +122,6 @@ class OnionClient(Thread):
             return
 
         self.network_list = message['table']
-        print("contacting dir")
         self._close()
 
 
@@ -182,13 +181,11 @@ class OnionClient(Thread):
                 # e.g. for node 2, apply layer 1 then layer 0
                 for j in range(i - 1, -1, -1):
                     layer = self.sender_key_table.get_key(destID, j)
-                    print("layer {}".format(layer))
                     encrypted_data = enc.encrypt_fernet(encrypted_data, layer)
 
                 pkt = pm.new_relay_packet(destID, "extend", encrypted_data)
 
             # send first half of key exchange
-            print("sending packet {},{}".format(i, destID))
             self._send(pkt)
 
             # wait for a response packet; 30 tries
@@ -197,12 +194,10 @@ class OnionClient(Thread):
             while tries != 0:
                 try:
                     rec_bytes = self.client_socket.recv(BUFFER_SIZE)
-                    print("first client receiver {}".format(rec_bytes))
                     message = json.loads(rec_bytes.decode())
                     break
                 except socket.timeout:
                     tries -= 1
-                    print(tries)
                     if tries == 0:
                         print("ERROR    Timeout while waiting for confirmation packet [30 tries]\n")
                         print("         Directory connection exiting. . .")
@@ -227,17 +222,10 @@ class OnionClient(Thread):
 
         # remove encryption layers (from node 0 to node 2)
         layer = self.sender_key_table.get_key(self.entry_circID, 0)
-        print("layer {}".format(layer))
         payload = enc.decrypt_fernet(message['encrypted_data'], layer)
         for i in range(1, self.number_of_nodes):
             layer = self.sender_key_table.get_key(self.entry_circID, i)
-            print("payload before {}".format(payload))
-            print("layer {}".format(layer))
             payload = enc.decrypt_fernet(payload, layer)
-            print("payload {}".format(payload))
-        print("printing junk")
-        print(payload)
-        print("Built circuit successfully")
         self._close()
 
     def send_through_circuit(self, message):
@@ -252,14 +240,12 @@ class OnionClient(Thread):
         # TODO build more circuits, select a random one in the table
         ip, port = self.circuit_table.get_address(self.entry_circID).split(":")
         self._create(ip, int(port))
-        print("entry circ {}".format(self.entry_circID))
         # apply three encryption layers to message
         # TODO put ip, port of website here if we don't want to do dns request on the exit node side
         encrypted_data = pm.new_payload(0, 0, message)
 
         for i in range(self.number_of_nodes - 1, -1, -1):
             layer = self.sender_key_table.get_key(self.entry_circID, i)
-            print("layer {}".format(layer))
             encrypted_data = enc.encrypt_fernet(encrypted_data, layer)
 
         pkt = pm.new_relay_packet(self.entry_circID, "relay_data", encrypted_data)
@@ -268,22 +254,14 @@ class OnionClient(Thread):
 
     def receive_from_circuit(self, client_socket):
         rec_bytes = client_socket.recv(BUFFER_SIZE)
-        print("receive from circuit")
-        print(rec_bytes)
-        print(rec_bytes.decode("UTF-8"))
         #message_str = rec_bytes.decode('utf-8')
         message = json.loads(rec_bytes.decode("UTF-8"))
 
         layer = self.sender_key_table.get_key(self.entry_circID, 0)
-        print("layer {}".format(layer))
         payload = enc.decrypt_fernet(message['encrypted_data'], layer)
         for i in range(1, self.number_of_nodes):
             layer = self.sender_key_table.get_key(self.entry_circID, i)
-            print("payload before {}".format(payload))
-            print("layer {}".format(layer))
             payload = enc.decrypt_fernet(payload, layer)
-            print("payload {}".format(payload))
-        print("printing html")
         payload = base64.urlsafe_b64decode(payload['data']).decode("UTF-8")
         return payload
 
@@ -293,10 +271,7 @@ class OnionClient(Thread):
 
     def _send(self, message_str):
         message_bytes = message_str.encode('utf-8')
-        print("client {}".format(message_bytes))
         self.client_socket.sendall(message_bytes)
-        print("sent")
 
     def _close(self):
-        print("closing socket")
         self.client_socket.close()
