@@ -15,6 +15,7 @@ import base64
 
 import circuit_tables as ct
 import encryption as enc
+from errors import OnionError, OnionRuntimeError
 
 BUFFER_SIZE = 4096  # Constant for now
 DEFAULT_TIMEOUT = 1
@@ -80,8 +81,7 @@ class OnionClient(Thread):
             called from exterior to tell client to send message through the circuit
         """
         if not self.initialized:
-            print("ERROR     Client not initialized. Call .connect() first.\n")
-            return
+            raise OnionRuntimeError("ERROR     Client not initialized. Call .connect() first.\n")
 
         self.send_through_circuit(url)
 
@@ -108,28 +108,34 @@ class OnionClient(Thread):
             message = json.loads(rec_bytes.decode())
 
         if message == -1 or message['type'] != "dir":
-            print("ERROR    Unexpected answer from directory\n")
-            # invalid message, ignore
-            return
+            raise OnionRuntimeError("ERROR    Unexpected answer from directory\n")
 
         self.network_list = message['table']
 
     def _select_random_nodes(self):
         if len(self.network_list['nodes in network']) < self.number_of_nodes:
-            print("ERROR    There are not enough nodes to build the circuit. Current: ",
-                  len(self.network_list), "requested", self.number_of_nodes)
-            return -1
+            raise OnionRuntimeError(
+                "ERROR    There are not enough nodes to build the circuit",
+                "Current: ",
+                len(self.network_list),
+                "requested",
+                self.number_of_nodes)
 
-        return random.sample(self.network_list['nodes in network'], self.number_of_nodes)
+        result = random.sample(
+            self.network_list['nodes in network'],
+            self.number_of_nodes)
+        return result
 
     def _generate_new_circID(self):
         # define a limit to how many circuits the node can be part of
         max_circuit_no = 100
 
         if self.circuit_table.get_length() == max_circuit_no:
-            print("ERROR    Too many active circuits; could not create circuit. Current max is ", max_circuit_no)
-            print("         Try deleting a circuit before creating a new one")
-            return
+            raise OnionRuntimeError(
+                "ERROR    Too many active circuits; could not create circuit.",
+                "Current max is ", max_circuit_no,
+                "\nTry deleting a circuit before creating a new one"
+            )
 
         # generate a circID that is not in use in the circuit_table
         while True:
@@ -150,6 +156,7 @@ class OnionClient(Thread):
         self._create(entry_node['ip'], entry_node['port'])
         with socket.socket() as client_socket:
             client_socket.connect((entry_node['ip'], entry_node['port']))
+
             # first link is special: only one to get control "create" packet
             destID = self._generate_new_circID()
             self.entry_circID = destID
@@ -170,14 +177,13 @@ class OnionClient(Thread):
             rec_bytes = client_socket.recv(BUFFER_SIZE)
             message = json.loads(rec_bytes.decode())
 
-            if message == -1 or (message['command'] != 'created' and message['command'] != 'extended'):
-                print("ERROR    Did not receive expected confirmation packet\n")
+            if message == -1 or message['command'] != 'created':
+                raise OnionRuntimeError(
+                    "ERROR    Did not receive expected confirmation packet\n"
+                )
                 print("         Circuit building exiting. . .")
-                # invalid message, ignore
-                self._close()
-                return
 
-            # received "created" or "extended packet successfully -- store info in tables
+            # received "created" packet successfully -- store info in tables
             # TODO check return value. right now created packets are filled with junk
             self.sender_key_table.add_key_entry(destID, 0, k)
 
@@ -187,59 +193,52 @@ class OnionClient(Thread):
                 nodes[0]['port'],
                 destID)
 
-        for i in range(1, len(nodes)):
-            k = enc.generate_fernet_key()
-            ciphered_shared_key = enc.encrypt_RSA(
-                k,
-                nodes[i]['public_exp'],
-                nodes[i]['modulus'])
-            
-            # data to be placed in "extend" packet payload. nodes will use circIDs to navigate,
-            # until a node has decrypted the payload and finds the ip and port of the new node
-            encrypted_data = pm.new_relay_payload(nodes[i]['ip'], nodes[i]['port'], ciphered_shared_key)
+            # --- DONE WITH FIRST NODE
 
-            # apply layers of encryption on shared key + key exchange before sending it
-            # e.g. for node 2, apply layer 1 then layer 0
-            for j in range(i - 1, -1, -1):
-                layer = self.sender_key_table.get_key(destID, j)
-                encrypted_data = enc.encrypt_fernet(encrypted_data, layer)
+            # --- For all the other nodes:
+            for i in range(1, len(nodes)):
+                k = enc.generate_fernet_key()
+                ciphered_shared_key = enc.encrypt_RSA(
+                    k,
+                    nodes[i]['public_exp'],
+                    nodes[i]['modulus'])
 
-            pkt = pm.new_relay_packet(destID, "extend", encrypted_data)
+                # data to be placed in "extend" packet payload. nodes will use circIDs to navigate,
+                # until a node has decrypted the payload and finds the ip and port of the new node
+                encrypted_data = pm.new_relay_payload(
+                    nodes[i]['ip'],
+                    nodes[i]['port'],
+                    ciphered_shared_key)
 
-            # send first half of key exchange
-            self._send(pkt)
+                # apply layers of encryption on shared key + key exchange before sending it
+                # e.g. for node 2, apply layer 1 then layer 0
+                encryption_layer = i-1
+                while(encryption_layer >= 0):
+                    layer = self.sender_key_table.get_key(destID, encryption_layer)
+                    encrypted_data = enc.encrypt_fernet(encrypted_data, layer)
+                    encryption_layer -= 1
 
-            # wait for a response packet; 30 tries
-            tries = 30
-            message = -1
-            while tries != 0:
-                try:
-                    rec_bytes = self.client_socket.recv(BUFFER_SIZE)
-                    message = json.loads(rec_bytes.decode())
-                    break
-                except socket.timeout:
-                    tries -= 1
-                    if tries == 0:
-                        print("ERROR    Timeout while waiting for confirmation packet [30 tries]\n")
-                        print("         Directory connection exiting. . .")
-                        self._close()
-                        return
-                    continue
+                pkt = pm.new_relay_packet(destID, "extend", encrypted_data)
 
-            if message == -1 or (message['command'] != 'created' and message['command'] != 'extended'):
-                print("ERROR    Did not receive expected confirmation packet\n")
-                print("         Circuit building exiting. . .")
-                # invalid message, ignore
-                self._close()
-                return
+                # send first half of key exchange
+                client_socket.sendall(pkt.encode())
 
-            # received "created" or "extended packet successfully -- store info in tables
-            # TODO check return value. right now created packets are filled with junk
-            self.sender_key_table.add_key_entry(destID, i, k)
+                rec_bytes = client_socket.recv(BUFFER_SIZE)
+                message = json.loads(rec_bytes.decode())
 
-            # store connection to first circID, the entry point to the circuit
-            if (i == 0):
-                self.circuit_table.add_circuit_entry(nodes[0]['ip'], nodes[0]['port'], destID)
+                if message == -1 or (message['command'] != 'created' and message['command'] != 'extended'):
+                    raise OnionRuntimeError(
+                        "ERROR    Did not receive expected confirmation packet\n"
+                    )
+                    print("         Circuit building exiting. . .")
+
+                # received "created" or "extended packet successfully -- store info in tables
+                # TODO check return value. right now created packets are filled with junk
+                self.sender_key_table.add_key_entry(destID, i, k)
+
+                # store connection to first circID, the entry point to the circuit
+                if (i == 0):
+                    self.circuit_table.add_circuit_entry(nodes[0]['ip'], nodes[0]['port'], destID)
 
         # remove encryption layers (from node 0 to node 2)
         layer = self.sender_key_table.get_key(self.entry_circID, 0)
@@ -254,8 +253,9 @@ class OnionClient(Thread):
             called from exterior to tell client to send message through the circuit
         """
         if not self.initialized:
-            print("ERROR     Client not initialized. Call .connect() first.\n")
-            return
+            raise OnionRuntimeError(
+                "ERROR     Client not initialized. Call .connect() first.\n"
+            )
 
         # get entry point (currently fixed to only one)
         # TODO build more circuits, select a random one in the table
