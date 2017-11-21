@@ -78,13 +78,13 @@ def generate_nodes(onion_node_count=10, starting_port=12345):
 
     Returns: (DirectoryNode, List[OnionNode])
     """
-    directory_node = DirectoryNode(receiving_port=starting_port)
+    directory_node = DirectoryNode(ip=socket.gethostname(), port=starting_port)
     onion_nodes = []
     for i in range(onion_node_count):
         node_name = "ONION_NODE_{}".format(i)
         node_receiving_port = starting_port + i
         node_private_key = 127 + i  # Some lousy private key.
-        node = OnionNode(node_name, node_receiving_port, node_private_key)
+        node = OnionNode(ip=socket.gethostname(), port=node_receiving_port)
         onion_nodes.append(node)
 
     return directory_node, onion_nodes
