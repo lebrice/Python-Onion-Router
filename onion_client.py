@@ -35,9 +35,6 @@ class OnionClient():
         self.network_list = {}
 
         self.client_socket = None
-        self.client_socket_open = False
-        self.current_target_ip = None
-        self.current_target_port = None
 
     def connect(self, dir_ip, dir_port):
         """
@@ -119,67 +116,24 @@ class OnionClient():
 
     def _build_circuit(self):
         nodes = self._select_random_nodes()
-        
-        self._send_create_packet(nodes[0])
-        for node in nodes[1:]:
-            self._send_extend_packet(node)
-        
-        # DONE. (TODO: move what's left to other methods for clarity.)
-        return
+        for index, node in enumerate(nodes):
+            if index == 0:
+                self._connect_with_entry_node(node)
+                self.send_create_packet(node)
+            else:
+                self._send_extend_packet(node, index)
 
-        # will always send the packet through the first node to reach the others
-        entry_node = nodes[0]
+    def _connect_with_entry_node(self, entry_node):
+        destID = self._generate_new_circID()
+        self.entry_circID = destID
+        self.circuit_table.add_circuit_entry(
+            entry_node['ip'],
+            entry_node['port'],
+            destID)
 
         # NOTE: This should be the ONLY place where we create this socket.
-        self._create(entry_node['ip'], entry_node['port'])
-        # --- DONE WITH FIRST NODE
-
-        # --- For all the other nodes:
-        for i in range(1, len(nodes)):
-            key = enc.generate_fernet_key()
-            ciphered_shared_key = enc.encrypt_RSA(
-                key,
-                nodes[i]['public_exp'],
-                nodes[i]['modulus'])
-
-            # data to be placed in "extend" packet payload. nodes will use circIDs to navigate,
-            # until a node has decrypted the payload and finds the ip and port of the new node
-            encrypted_data = pm.new_relay_payload(
-                nodes[i]['ip'],
-                nodes[i]['port'],
-                ciphered_shared_key)
-
-            # apply layers of encryption on shared key + key exchange before sending it
-            encrypted_data = self.successive_encrypt(encrypted_data)
-
-            pkt = pm.new_relay_packet(destID, "extend", encrypted_data)
-
-            # send first half of key exchange
-            self.client_socket.sendall(pkt.encode())
-
-            rec_bytes = self.client_socket.recv(BUFFER_SIZE)
-            message = json.loads(rec_bytes.decode())
-
-            if message == -1 or (message['command'] != 'created' and message['command'] != 'extended'):
-                raise OnionRuntimeError(
-                    "ERROR    Did not receive expected confirmation packet\n"
-                )
-                print("         Circuit building exiting. . .")
-
-            # received "created" or "extended packet successfully -- store info in tables
-            # TODO check return value. right now created packets are filled with junk
-            self.sender_key_table.add_key_entry(destID, i, key)
-
-            # store connection to first circID, the entry point to the circuit
-            if (i == 0):
-                self.circuit_table.add_circuit_entry(nodes[0]['ip'], nodes[0]['port'], destID)
-
-        # remove encryption layers (from node 0 to node 2)
-        layer = self.sender_key_table.get_key(self.entry_circID, 0)
-        payload = enc.decrypt_fernet(message['encrypted_data'], layer)
-        for i in range(1, self.number_of_nodes):
-            layer = self.sender_key_table.get_key(self.entry_circID, i)
-            payload = enc.decrypt_fernet(payload, layer)
+        self.client_socket = socket.socket()
+        self.client_socket.connect((entry_node['ip'], entry_node['port']))
 
     def _send_create_packet(entry_node):
         assert self.client_socket is not None
@@ -190,13 +144,6 @@ class OnionClient():
             key,
             entry_node['public_exp'],
             entry_node['modulus'])
-
-        destID = self._generate_new_circID()
-        self.entry_circID = destID
-        self.circuit_table.add_circuit_entry(
-            entry_node['ip'],
-            entry_node['port'],
-            destID)
 
         key = enc.generate_fernet_key()
         self.sender_key_table.add_key_entry(destID, 0, key)
@@ -225,11 +172,39 @@ class OnionClient():
             entry_node['port'],
             destID)
 
-    def _send_extend_packet(self, node):
+    def _send_extend_packet(self, node, layer):
         """
-        TODO: Take out the logic from circuit building, make it simpler.
         """
-        raise NotImplementedError()
+        key = enc.generate_fernet_key()
+        ciphered_shared_key = enc.encrypt_RSA(
+            key,
+            node['public_exp'],
+            node['modulus'])
+
+        # data to be placed in "extend" packet payload. nodes will use circIDs to navigate,
+        # until a node has decrypted the payload and finds the ip and port of the new node
+        encrypted_data = pm.new_relay_payload(
+            node['ip'],
+            node['port'],
+            ciphered_shared_key)
+
+        # apply layers of encryption on shared key + key exchange before sending it
+        encrypted_data = self.successive_encrypt(encrypted_data, layer)
+
+        pkt = pm.new_relay_packet(destID, "extend", encrypted_data)
+
+        # send first half of key exchange
+        self.client_socket.sendall(pkt.encode())
+        rec_bytes = self.client_socket.recv(BUFFER_SIZE)
+        message = json.loads(rec_bytes.decode())
+
+        if message == -1 or (message['command'] != 'created' and message['command'] != 'extended'):
+            raise OnionRuntimeError(
+                "ERROR    Did not receive expected confirmation packet\n"
+            )
+            print("         Circuit building exiting. . .")
+
+        self.sender_key_table.add_key_entry(destID, layer, key)
 
     def send_through_circuit(self, message):
         """
@@ -250,7 +225,7 @@ class OnionClient():
 
         message = pm.new_payload(0, 0, message)
         # apply three encryption layers to message
-        encrypted_data = self.successive_encrypt(message)
+        encrypted_data = self.successive_encrypt(message, self.number_of_nodes)
         pkt = pm.new_relay_packet(
             self.entry_circID,
             "relay_data",
@@ -265,28 +240,15 @@ class OnionClient():
         payload = base64.urlsafe_b64decode(decrypted['data']).decode("UTF-8")
         return payload
 
-    def _send(self, message_str):
-        message_bytes = message_str.encode('utf-8')
-        self.client_socket.sendall(message_bytes)
-
-    def _close(self):
-        self.client_socket.close()
-        self.client_socket = None
-
-    def _create(self, ip, port):
-        if self.client_socket is not None:
-            raise OnionRuntimeError("Don't create twice without closing!")
-
-        self.client_socket = socket.socket()
-        self.client_socket.connect((ip, port))
-
-    def successive_encrypt(self, message):
+    def successive_encrypt(self, message, layer_count):
         """
         apply three encryption layers to message
         """
-        for i in range(self.number_of_nodes - 1, -1, -1):
-            key = self.sender_key_table.get_key(self.entry_circID, i)
-            encrypted_data = enc.encrypt_fernet(encrypted_data, key)
+        # apply layers of encryption on shared key + key exchange before sending it
+        # e.g. for node 2, apply layer 1 then layer 0
+        for j in range(layer_count - 1, -1, -1):
+            key = self.sender_key_table.get_key(destID, j)
+            encrypted_data = enc.encrypt_fernet(encrypted_data, jey)
         return encrypted_data
 
     def successive_decrypt(self, data):
