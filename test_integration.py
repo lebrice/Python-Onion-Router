@@ -81,23 +81,32 @@ class IntegrationTestCase(unittest.TestCase):
         # self.assertEquals(expected, self.website.received_message)
         self.assertIn("GET / HTTP/1.1".encode(), self.website.received_message)
 
-    # @unittest.skip
-    # def test_receive_works(self):
-    #     """
-    #     tests that what is received from the circuit is the same as what the
-    #     website originally sent.
-    #     """
+    # Skipped, since receive_from_circuit isn't correctly defined atm.
+    @unittest.skip
+    def test_receive_works(self):
+        """
+        tests that what is received from the circuit is the same as what the
+        website originally sent.
+        """
 
-    #     url = "{}:{}".format(WEBSITE_IP, WEBSITE_PORT)
+        url = "{}:{}".format(WEBSITE_IP, WEBSITE_PORT)
 
-    #     client = OnionClient(DIR_IP, CLIENT_PORT, NODE_COUNT)
-    #     client.connect(DIR_IP, DIR_PORT)
+        client = OnionClient(DIR_IP, CLIENT_PORT, NODE_COUNT)
+        client.connect(DIR_IP, DIR_PORT)
 
-    #     # TODO: Update onion_client, such that the separate return call is used.
-    #     client.send_through_circuit(url)
+        # TODO: Update onion_client, such that the separate return call is used.
+        client.send_through_circuit(url)
 
-    #     response = client.receive_from_circuit()
-    #     self.assertEqual(response, self.website.reply_message)
+        response = client.receive_from_circuit()
+        self.assertEqual(response, self.website.reply_message)
+
+    def test_number_of_nodes_in_dir_node_is_correct(self):
+        # TODO: fix DirectoryNode, such that the data is directly accessible
+        # (held in memory) as well. Going through the JSON is quite cumbersome.
+        dir_data = self.directory_node.return_json()
+        current_node_count = len(dir_data["nodes in network"])
+        self.assertEqual(current_node_count, NODE_COUNT)
+
 
 
 class TestingWebsite(threading.Thread):
