@@ -54,7 +54,7 @@ class IntegrationTestCase(unittest.TestCase):
         STARTING_PORT += 10
         time.sleep(1)
 
-    def test_send_through_circuit_works(self):
+    def test_send_works(self):
 
         url = "{}:{}".format(WEBSITE_IP, WEBSITE_PORT)
 
@@ -81,23 +81,23 @@ class IntegrationTestCase(unittest.TestCase):
         # self.assertEquals(expected, self.website.received_message)
         self.assertIn("GET / HTTP/1.1".encode(), self.website.received_message)
 
-    @unittest.skip
-    def test_receive_from_circuit_works(self):
-        """
-        tests that what is received from the circuit is the same as what the
-        website originally sent.
-        """
+    # @unittest.skip
+    # def test_receive_works(self):
+    #     """
+    #     tests that what is received from the circuit is the same as what the
+    #     website originally sent.
+    #     """
 
-        url = "{}:{}".format(WEBSITE_IP, WEBSITE_PORT)
+    #     url = "{}:{}".format(WEBSITE_IP, WEBSITE_PORT)
 
-        client = OnionClient(DIR_IP, CLIENT_PORT, NODE_COUNT)
-        client.connect(DIR_IP, DIR_PORT)
+    #     client = OnionClient(DIR_IP, CLIENT_PORT, NODE_COUNT)
+    #     client.connect(DIR_IP, DIR_PORT)
 
-        # TODO: Update onion_client, such that the separate return call is used.
-        client.send_through_circuit(url)
+    #     # TODO: Update onion_client, such that the separate return call is used.
+    #     client.send_through_circuit(url)
 
-        response = client.receive_from_circuit()
-        self.assertEqual(response, self.website.reply_message)
+    #     response = client.receive_from_circuit()
+    #     self.assertEqual(response, self.website.reply_message)
 
 
 class TestingWebsite(threading.Thread):
@@ -119,32 +119,31 @@ class TestingWebsite(threading.Thread):
 
     def run(self):
         with socket.socket() as _socket:
-            _socket.settimeout(None)
+            _socket.settimeout(1)
             _socket.bind((socket.gethostname(), self.port))
             _socket.listen()
 
             while self.running:
-                # try:
-                client_socket, address = _socket.accept()
+                try:
+                    client_socket, address = _socket.accept()
 
-                done = False
-                received_chunks = []
-                new_bytes = client_socket.recv(1024)
-                received_chunks.append(new_bytes)
-                print("WEBSITE RECEIVED: ", new_bytes)
-                received_bytes = b''.join(received_chunks)
+                    done = False
+                    received_chunks = []
+                    new_bytes = client_socket.recv(1024)
+                    received_chunks.append(new_bytes)
+                    print("WEBSITE RECEIVED: ", new_bytes)
+                    received_bytes = b''.join(received_chunks)
 
-                if self.reply_message:
-                    print("sending back a message: ", self.reply_message)
-                    client_socket.sendall(self.reply_message.encode())
+                    if self.reply_message:
+                        print("sending back a message: ", self.reply_message)
+                        client_socket.sendall(self.reply_message.encode())
 
-                self.received_message = received_bytes
-                print("Received message is ", self.received_message)
-                client_socket.close()
+                    self.received_message = received_bytes
+                    print("Received message is ", self.received_message)
+                    client_socket.close()
 
-
-                # except socket.timeout:
-                #     continue
+                except socket.timeout:
+                    continue
 
     def stop(self):
         self.running = False
