@@ -210,7 +210,7 @@ class OnionClient():
         assert self.client_socket is None
         assert self.circuit_id is not None
         assert self._entry_node is not None
-        
+
         # NOTE: validate how we create and/or reuse sockets.
         self.client_socket = socket.socket()
         self.client_socket.connect((self._entry_node['ip'],
@@ -241,7 +241,7 @@ class OnionClient():
 
         message = json.loads(rec_bytes.decode())
 
-        if message == -1 or (message['command'] != 'created' and message['command'] != 'extended'):
+        if message == -1 or message['command'] != 'extended':
             raise OnionRuntimeError(
                 "ERROR    Did not receive expected confirmation packet\n"
             )
@@ -287,7 +287,18 @@ class OnionClient():
             "relay_data",
             encrypted_data)
 
-        self.client_socket.sendall(pkt.encode())
+        done = False
+        while not done:
+            try:
+                self.client_socket.sendall(pkt.encode())
+            except ConnectionResetError:
+                self.client_socket.close()
+                self.client_socket = socket.socket()
+                self.client_socket.connect(
+                    (self._entry_node['ip'], self._entry_node['port'])
+                )
+            else:
+                done = True
 
     def receive_from_circuit(self, buffer_size=BUFFER_SIZE):
         """
