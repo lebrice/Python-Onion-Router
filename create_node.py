@@ -63,6 +63,8 @@ def main():
     if args.port is None:
         raise RuntimeError("Invalid 'port' argument")
 
+    print("Creating an Onion Node at ", socket.gethostname(), ":", int(args.port))
+
     node = OnionNode(socket.gethostname(), int(args.port))
     node.connect(directory_node_ip, int(directory_node_port))
     node.start()
