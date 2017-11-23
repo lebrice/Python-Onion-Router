@@ -46,6 +46,14 @@ def main():
         description='Initialize a node in the onion_routing network.'
     )
     parser.add_argument(
+        '-ip',
+        action='store',
+        dest='ip',
+        type=str,
+        default=socket.gethostname(),
+        help='the ip to create the node on.'
+    )
+    parser.add_argument(
         '-port',
         action='store',
         dest='port',
@@ -77,7 +85,7 @@ def main():
     if args.port is None:
         raise RuntimeError("Invalid 'port' argument")
 
-    client = OnionClient(socket.gethostname(), args.port, 3)
+    client = OnionClient(args.ip, int(args.port), 3)
     client.connect(args.dirIP, int(args.dirPort))
 
     url = input("Please Enter a Url: ('www.perdu.com', for example)\n")
