@@ -109,9 +109,6 @@ class NodeSwitchboard(Thread):
             return
 
     def _process_relay(self, message):
-        # TODO: remove this, used to simulate delay between hosts.
-        import time
-        time.sleep(0.5)
         # message is going forwards,  decrypt one layer
         if message['command'] == "extend" or message['command'] == "relay_data":
             key = self.node_key_table.get_key(message['circID'])
