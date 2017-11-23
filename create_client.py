@@ -10,6 +10,7 @@ import onion_client
 from onion_client import OnionClient
 import node
 from node import OnionNode
+import get_request
 
 
 def _write_to_html(filename, payload):
@@ -100,9 +101,21 @@ def main():
 
     end_time = time.time()
     elapsed_time = end_time - start_time
-    print("Elapsed_time: ", elapsed_time, "seconds")
+    print("Elapsed_time: (with Onion Routing)   \t", elapsed_time, "seconds")
 
     webbrowser.get().open('file://' + os.path.realpath(filename), 1)
+    # WITHOUT onion routing:
+
+    start_time_2 = time.time()
+    response = get_request.web_request(url).decode()
+    filename_2 = 'returned2.html'
+    _write_to_html(filename_2, response)
+    end_time_2 = time.time()
+
+    elapsed_time_2 = end_time_2 - start_time_2
+
+    print("Elapsed_time: (without Onion Routing)\t", elapsed_time_2, "seconds")
+    webbrowser.get().open('file://' + os.path.realpath(filename_2), 1)
     print("DONE")
 
 if __name__ == '__main__':
