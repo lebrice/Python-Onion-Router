@@ -85,15 +85,22 @@ def main():
     if args.port is None:
         raise RuntimeError("Invalid 'port' argument")
 
+    url = input("Please Enter a Url: ('www.perdu.com', for example)\n")
+
+    import time
+    start_time = time.time()
+
     client = OnionClient(args.ip, int(args.port), 3)
     client.connect(args.dirIP, int(args.dirPort))
-
-    url = input("Please Enter a Url: ('www.perdu.com', for example)\n")
 
     print("#####REQUESTING#####")
     will = client.send_through_circuit(url)
     filename = 'returned.html'
     _write_to_html(filename, will)
+
+    end_time = time.time()
+    elapsed_time = end_time - start_time
+    print("Elapsed_time: ", elapsed_time, "seconds")
 
     webbrowser.get().open('file://' + os.path.realpath(filename), 1)
     print("DONE")
