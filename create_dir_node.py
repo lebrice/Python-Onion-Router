@@ -14,14 +14,17 @@ from node import DirectoryNode
 def main():
     """
     Use: 
-        > python create_dir_node.py -port 12346 [-dirIP '185.172.0.3' -dirPort 12345]
+        > python create_dir_node.py -port 12346
     """
 
+    directory_node_ip = None
     directory_node_port = None
     try:
         with open("config.json") as config_file:
             print("Loading Directory Node Info from 'config.json' file...")
             config = json.load(config_file)
+            
+            directory_node_ip = config['DIR_NODE_IP']
             directory_node_port = int(config['DIR_NODE_PORT'])
             print("Using Directory Node PORT:", directory_node_port)
     except FileNotFoundError:
@@ -41,7 +44,7 @@ def main():
 
     args = parser.parse_args()
 
-    dir_node = DirectoryNode("142.157.16.133", int(args.port))
+    dir_node = DirectoryNode(directory_node_ip, int(args.port))
     dir_node.start()
 
     while("exit" not in input()):
