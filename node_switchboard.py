@@ -152,21 +152,24 @@ class NodeSwitchboard(Thread):
                     ip, port = self.circuit_table.get_address(message['circID']).split(':')
 
                     #oli garbage
-                    well_formatted = json.dumps(json.loads(pkt), indent='\t')
-                    print("SENDING GET REQUEST:\n", well_formatted)
                     self._send(pkt)
                     #self._relay(pkt, ip, port)
 
             else:
                 # could not decrypt payload, meant for a node further along
                 # -> get next node addr from table, replace circID, remove one layer, and send packet along
+
+                if(message['command'] != "extend"):
+                    print("FORWARDING MESSAGE IN CIRCUIT:")
+                    print(json.dumps(message, indent='\t'), "\n")
+                else:
+                    print("Noting")
+
                 destID = self.node_relay_table.get_dest_id(message['circID'])
                 message['circID'] = destID
                 message['encrypted_data'] = decrypted_payload
                 ip, port = self.circuit_table.get_address(message['circID']).split(':')
-
-                print("FORWARDING MESSAGE IN CIRCUIT:")
-                print(json.dumps(message, indent='\t'), "\n")
+                
                 #oli garbage
                 #self._send(message)
                 self._relay(json.dumps(message), ip, int(port))
