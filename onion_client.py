@@ -20,7 +20,7 @@ from errors import OnionError, OnionRuntimeError
 BUFFER_SIZE = 4096  # Constant for now
 DEFAULT_TIMEOUT = 1
 
-socket.setdefaulttimeout(None)
+# socket.setdefaulttimeout(DEFAULT_TIMEOUT)
 
 
 class OnionClient():
@@ -35,6 +35,7 @@ class OnionClient():
         self.network_list = {}
 
         self.client_socket = None
+        self._entry_node = None
 
     def connect(self, dir_ip, dir_port):
         """
@@ -120,20 +121,22 @@ class OnionClient():
             else:
                 self._send_extend_packet(node, index)
 
-    def _connect_with_entry_node(self, entry_node):
+    def _save_entry_node(self, entry_node):
         self.entry_circID = self._generate_new_circID()
         self.circuit_table.add_circuit_entry(
             entry_node['ip'],
             entry_node['port'],
             self.entry_circID)
-
-        # NOTE: This should be the ONLY place where we create this socket.
-        self.client_socket = socket.socket()
-        self.client_socket.connect((entry_node['ip'], entry_node['port']))
+        self._entry_node = entry_node
 
     def _send_create_packet(self, entry_node):
-        assert self.client_socket is not None
+        assert self.client_socket is None
         # first link is special: only one to get control "create" packet
+
+        # NOTE: validate how we create and/or reuse sockets.
+        self.client_socket = socket.socket()
+        self.client_socket.connect((self.entry_node['ip'],
+                                    self.entry_node['port']))
 
         key = enc.generate_fernet_key()
         self.sender_key_table.add_key_entry(self.entry_circID, 0, key)
@@ -165,12 +168,24 @@ class OnionClient():
             entry_node['ip'],
             entry_node['port'],
             self.entry_circID)
-        
         print("Successfully sent the first 'create' packet")
+
+        # TODO: Make sure that we should really reuse the same socket.
+        self.client_socket.close()
+        del self.client_socket
 
     def _send_extend_packet(self, node, layer):
         """
+        Send an 'extend' to the rest of the nodes in the circuit that we are
+        building.
         """
+        assert self.client_socket is None
+        
+        # NOTE: validate how we create and/or reuse sockets.
+        self.client_socket = socket.socket()
+        self.client_socket.connect((self.entry_node['ip'],
+                                    self.entry_node['port']))
+
         key = enc.generate_fernet_key()
         ciphered_shared_key = enc.encrypt_RSA(
             key,
@@ -189,13 +204,12 @@ class OnionClient():
 
         pkt = pm.new_relay_packet(self.entry_circID, "extend", encrypted_data)
 
-
         # send first half of key exchange
         self.client_socket.sendall(pkt.encode())
 
         tries = 0
         rec_bytes = None
-        while(tries < 3):
+        while(tries < 30):
             print("Waiting for a response:")
             try:
                 rec_bytes = self.client_socket.recv(BUFFER_SIZE)
@@ -212,6 +226,9 @@ class OnionClient():
             print("         Circuit building exiting. . .")
 
         self.sender_key_table.add_key_entry(self.entry_circID, layer, key)
+
+        self.client_socket.close()
+        del self.client_socket
 
     def send_through_circuit(self, message):
         """
