@@ -165,8 +165,6 @@ class NodeSwitchboard(Thread):
                 if(message['command'] != "extend"):
                     print("FORWARDING MESSAGE IN CIRCUIT:")
                     print(json.dumps(message, indent='\t'), "\n")
-                else:
-                    print("Noting")
 
                 destID = self.node_relay_table.get_dest_id(message['circID'])
                 message['circID'] = destID
