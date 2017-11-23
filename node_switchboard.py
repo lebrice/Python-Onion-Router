@@ -147,12 +147,13 @@ class NodeSwitchboard(Thread):
                     payload = pm.new_relay_payload(0, 0, ans)
 
                     encrypted_payload = enc.encrypt_fernet(payload, key)
-                    print("SENDING GET REQUEST:", encrypted_payload)
 
                     pkt = pm.new_relay_packet(message['circID'], "relay_ans", encrypted_payload)
                     ip, port = self.circuit_table.get_address(message['circID']).split(':')
 
                     #oli garbage
+                    well_formatted = json.dumps(json.loads(pkt), indent='\t')
+                    print("SENDING GET REQUEST:\n", well_formatted)
                     self._send(pkt)
                     #self._relay(pkt, ip, port)
 
