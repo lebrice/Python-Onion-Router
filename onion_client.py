@@ -17,10 +17,7 @@ import circuit_tables as ct
 import encryption as enc
 from errors import OnionError, OnionRuntimeError
 
-BUFFER_SIZE = 4096  # Constant for now
-DEFAULT_TIMEOUT = 1
-
-# socket.setdefaulttimeout(DEFAULT_TIMEOUT)
+BUFFER_SIZE = 4096
 
 DEFAULT_DIRECTORY_NODE_IP = socket.gethostname()
 DEFAULT_DIRECTORY_NODE_PORT = 12345
@@ -53,19 +50,21 @@ class OnionClient():
             NOTE: renamed from 'connect', in order not to get confused with
             the 'socket.connect((ip, port))' method.
         """
-        
+
         self._contact_dir_node(directory_node_ip, directory_node_port)
         self._build_circuit()
         self.initialized = True
 
     def make_get_request_to_url(self, url):
         """
-            called from exterior to tell client to send message through the circuit
+        called from exterior to tell client to send message through the circuit
         """
         self.send_through_circuit(url)
 
     def recv(self, buffer_size):
-        """ Receives the given number of bytes from the Onion socket.
+        """
+        Receives the given number of bytes from the previously established
+        connection with the host.
         """
         chunks_received = []
         bytes_received_so_far = 0
@@ -100,12 +99,15 @@ class OnionClient():
             message = json.loads(rec_bytes.decode())
 
         if message == -1 or message['type'] != "dir":
-            raise OnionRuntimeError("ERROR    Unexpected answer from directory\n")
+            raise OnionRuntimeError(
+                "ERROR    Unexpected answer from directory\n"
+            )
 
         self.network_list = message['table']
 
     def _select_random_nodes(self):
-        if len(self.network_list['nodes in network']) < self.number_of_nodes_in_circuit:
+        current_node_count = len(self.network_list['nodes in network'])
+        if current_node_count < self.number_of_nodes_in_circuit:
             raise OnionRuntimeError(
                 "ERROR    There are not enough nodes to build the circuit",
                 "Current: ",
@@ -115,7 +117,8 @@ class OnionClient():
 
         result = random.sample(
             self.network_list['nodes in network'],
-            self.number_of_nodes_in_circuit)
+            self.number_of_nodes_in_circuit
+        )
         return result
 
     def _generate_new_circID(self):
@@ -161,8 +164,8 @@ class OnionClient():
 
         # NOTE: validate how we create and/or reuse sockets.
         self.client_socket = socket.socket()
-        self.client_socket.connect((node['ip'],
-                                    node['port']))
+        self.client_socket.connect((self._entry_node['ip'],
+                                    self._entry_node['port']))
 
         key = enc.generate_fernet_key()
         self.sender_key_table.add_key_entry(self.circuit_id, 0, key)
@@ -186,7 +189,6 @@ class OnionClient():
             raise OnionRuntimeError(
                 "ERROR    Did not receive expected confirmation packet\n"
             )
-            print("         Circuit building exiting. . .")
 
         # received "created" packet successfully -- store info in tables
         # store connection to first circID, the entry point to the circuit
@@ -289,7 +291,7 @@ class OnionClient():
 
     def receive_from_circuit(self, buffer_size=BUFFER_SIZE):
         """
-        moved to recv() for clarity.
+        NOTE: moved to recv() for clarity.
         """
         return recv(buffer_size)
 
