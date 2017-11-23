@@ -240,7 +240,6 @@ class DirectoryNode(Thread):
             while self.running:
                 try:
                     client_socket, client_address = recv_socket.accept()
-                    print("GOT A CONNECTION FROM", client_address)
                     with client_socket:  # Closes it automatically.
                         client_socket.settimeout(DEFAULT_TIMEOUT)
                         rec_bytes = client_socket.recv(1024)
@@ -253,7 +252,10 @@ class DirectoryNode(Thread):
 
                         updated = 0
                         if message['command'] == "dir_update":
+                            print("GOT A CONNECTION FROM", client_address, "(NEW NODE)")
                             updated = self.write_to_json(message['ip'], message['port'], message['public_exp'], message['modulus'])
+                        else:
+                            print("GOT A CONNECTION FROM", client_address, "(ONION CLIENT)")
 
                         pkt = pm.new_dir_packet("dir_answer", updated, self.return_json())
                         message_bytes = pkt.encode('utf-8')
