@@ -55,9 +55,54 @@ class OnionClient():
 
     def make_get_request_to_url(self, url):
         """
-        called from exterior to tell client to send message through the circuit
+        called from exterior to tell client to make a get request to the given
+        URL through the circuit.
         """
-        self.send_through_circuit(url)
+        assert self.circuit_id is not None
+        assert self._entry_node is not None
+
+        if not self.initialized:
+            raise OnionRuntimeError(
+                "ERROR     Client not initialized. Call .connect() first.\n"
+            )
+
+        # TODO:  make sure we shouldn't just reuse the same socket for
+        # multiple 'sends' (i.e. using a persistent relaying mechanism)
+
+        if self.client_socket is None:
+            # If we already had a client_socket, this means we are already
+            # connected with the entry node. No need to re-create the socket.
+            self.client_socket = socket.socket()
+            self.client_socket.connect((self._entry_node['ip'],
+                                        self._entry_node['port']))
+
+        message = pm.new_payload(0, 0, url)
+
+        # apply three encryption layers to message
+        encrypted_data = self.successive_encrypt(
+            message,
+            self.number_of_nodes_in_circuit
+        )
+
+        pkt = pm.new_relay_packet(
+            self.circuit_id,
+            "relay_data",
+            encrypted_data)
+
+        done = False
+        while not done:
+            try:
+                self.client_socket.sendall(pkt.encode())
+            except ConnectionResetError:
+                # The remote host closed their end of the socket, we have to
+                # re-connect.
+                self.client_socket.close()
+                self.client_socket = socket.socket()
+                self.client_socket.connect(
+                    (self._entry_node['ip'], self._entry_node['port'])
+                )
+            else:
+                done = True
 
     def recv(self, buffer_size):
         """
@@ -252,53 +297,10 @@ class OnionClient():
 
     def send_through_circuit(self, message):
         """
-        called from exterior to tell client to send message through the circuit
+        NOTE: Moved to make_get_request_to_url for clarity.
+        This is left here in order not to break functionality.
         """
-        assert self.circuit_id is not None
-        assert self._entry_node is not None
-
-        if not self.initialized:
-            raise OnionRuntimeError(
-                "ERROR     Client not initialized. Call .connect() first.\n"
-            )
-
-        # TODO:  make sure we shouldn't just reuse the same socket for
-        # multiple 'sends' (i.e. using a persistent relaying mechanism)
-
-        if self.client_socket is None:
-            # If we already had a client_socket, this means we are already
-            # connected with the entry node. No need to re-create the socket.
-            self.client_socket = socket.socket()
-            self.client_socket.connect((self._entry_node['ip'],
-                                        self._entry_node['port']))
-
-        message = pm.new_payload(0, 0, message)
-
-        # apply three encryption layers to message
-        encrypted_data = self.successive_encrypt(
-            message,
-            self.number_of_nodes_in_circuit
-        )
-
-        pkt = pm.new_relay_packet(
-            self.circuit_id,
-            "relay_data",
-            encrypted_data)
-
-        done = False
-        while not done:
-            try:
-                self.client_socket.sendall(pkt.encode())
-            except ConnectionResetError:
-                # The remote host closed their end of the socket, we have to
-                # re-connect.
-                self.client_socket.close()
-                self.client_socket = socket.socket()
-                self.client_socket.connect(
-                    (self._entry_node['ip'], self._entry_node['port'])
-                )
-            else:
-                done = True
+        return self.make_get_request_to_url(message)
 
     def receive_from_circuit(self, buffer_size=BUFFER_SIZE):
         """
