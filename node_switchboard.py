@@ -146,6 +146,9 @@ class NodeSwitchboard(Thread):
                     # TODO: place address of website here
                     payload = pm.new_relay_payload(0, 0, ans)
 
+                    print("FORWARDING MESSAGE TO NETWORK:")
+                    print(json.dumps(payload, indent='\t'), "\n")
+
                     encrypted_payload = enc.encrypt_fernet(payload, key)
 
                     pkt = pm.new_relay_packet(message['circID'], "relay_ans", encrypted_payload)
