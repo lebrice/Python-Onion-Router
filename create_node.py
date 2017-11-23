@@ -8,6 +8,8 @@ import webbrowser
 
 import onion_client as oc
 import node
+from node import OnionNode
+
 
 def main():
     """
@@ -25,9 +27,8 @@ def main():
             directory_node_port = config['DIR_NODE_PORT']
             print("Using Directory Node IP:", directory_node_ip)
             print("Using Directory Node PORT:", directory_node_port)
-
-        except FileNotFoundError:
-            raise RuntimeWarning("'config.json' file not found")
+    except FileNotFoundError:
+        raise RuntimeWarning("'config.json' file not found")
 
     parser = argparse.ArgumentParser(
         description='Initialize a node in the onion_routing network.'
@@ -36,7 +37,7 @@ def main():
         '-port',
         action='store',
         dest='port',
-        type=int,
+        type=str,
         help='the port to create the node on.'
     )
     parser.add_argument(
@@ -57,42 +58,20 @@ def main():
     )
 
     args = parser.parse_args()
-    
+
     if args.port is None:
-        raise RuntimeError("Invalid Argument Error")
-    return
+        raise RuntimeError("Invalid 'port' argument")
 
-    node = node.OnionNode(socket.gethostname(), 14440)
-    node1.connect(dir_ip, dir_port)
-    node1.start()
+    node = OnionNode(socket.gethostname(), int(args.port))
+    node.connect(directory_node_ip, int(directory_node_port))
+    node.start()
 
-    node2 = node.OnionNode('127.0.0.1', 8880)
-    node2.connect(dir_ip, dir_port)
-    node2.start()
+    while("exit" not in input()):
+        time.sleep(1)
 
-    node3 = node.OnionNode('127.0.0.1', 55610)
-    node3.connect(dir_ip, dir_port)
-    node3.start()
+    print("Closing Node")
+    node.stop()
 
-    client = oc.OnionClient('127.0.0.1', 54320, args.node_count)
-    client.connect(dir_ip, dir_port)
-    #client.start()
-
-    print("#####REQUESTING#####")
-    client.make_get_request_to_url(args.url)
-    will = client.recv(10000)
-    filename = 'returned.html'
-    _write_to_html(filename, will)
-
-    webbrowser.get().open('file://' + os.path.realpath(filename), 1)
-    #client.send("hello")
-
-    # print("Request for {}".format(args.url))
-    # print("{} returned:".format(args.url))
-    #
-    # #get request
-    # web_data = get_request.web_request(args.url)
-    # print(web_data.decode("UTF-8"))
 
 if __name__ == '__main__':
     main()
