@@ -28,13 +28,14 @@ class OnionClient():
         self.initialized = False
         self.ip = ip
         self.port = port
-        self.number_of_nodes = number_of_nodes
+        self.number_of_nodes_in_circuit = number_of_nodes
 
         self.circuit_table = ct.circuit_table()
         self.sender_key_table = ct.sender_key_table()
         self.network_list = {}
 
         self.client_socket = None
+        self.circuit_id = None
         self._entry_node = None
 
     def connect(self, dir_ip, dir_port):
@@ -80,17 +81,17 @@ class OnionClient():
         self.network_list = message['table']
 
     def _select_random_nodes(self):
-        if len(self.network_list['nodes in network']) < self.number_of_nodes:
+        if len(self.network_list['nodes in network']) < self.number_of_nodes_in_circuit:
             raise OnionRuntimeError(
                 "ERROR    There are not enough nodes to build the circuit",
                 "Current: ",
                 len(self.network_list),
                 "requested",
-                self.number_of_nodes)
+                self.number_of_nodes_in_circuit)
 
         result = random.sample(
             self.network_list['nodes in network'],
-            self.number_of_nodes)
+            self.number_of_nodes_in_circuit)
         return result
 
     def _generate_new_circID(self):
@@ -113,41 +114,42 @@ class OnionClient():
         return circID
 
     def _build_circuit(self):
+        """
+        Build the circuit to be used by this onion_client
+        NOTE: only one circuit per onion_client is allowed. (same as socket)
+        """
+        assert self.circuit_id is None
+
+        self.circuit_id = self._generate_new_circID()
         nodes = self._select_random_nodes()
         for index, node in enumerate(nodes):
             if index == 0:
-                self._connect_with_entry_node(node)
+                self._entry_node = node
                 self._send_create_packet(node)
             else:
                 self._send_extend_packet(node, index)
 
-    def _save_entry_node(self, entry_node):
-        self.entry_circID = self._generate_new_circID()
-        self.circuit_table.add_circuit_entry(
-            entry_node['ip'],
-            entry_node['port'],
-            self.entry_circID)
-        self._entry_node = entry_node
-
-    def _send_create_packet(self, entry_node):
+    def _send_create_packet(self, node):
         assert self.client_socket is None
+        assert self.circuit_id is not None
+        assert self._entry_node is not None
         # first link is special: only one to get control "create" packet
 
         # NOTE: validate how we create and/or reuse sockets.
         self.client_socket = socket.socket()
-        self.client_socket.connect((self.entry_node['ip'],
-                                    self.entry_node['port']))
+        self.client_socket.connect((node['ip'],
+                                    node['port']))
 
         key = enc.generate_fernet_key()
-        self.sender_key_table.add_key_entry(self.entry_circID, 0, key)
+        self.sender_key_table.add_key_entry(self.circuit_id, 0, key)
         ciphered_shared_key = enc.encrypt_RSA(
             key,
-            entry_node['public_exp'],
-            entry_node['modulus'])
+            node['public_exp'],
+            node['modulus'])
         payload = pm.new_payload(self.ip, self.port, ciphered_shared_key)
 
         # Create the custom control packet
-        pkt = pm.new_control_packet(self.entry_circID, "create", payload)
+        pkt = pm.new_control_packet(self.circuit_id, "create", payload)
 
         # send first half of key exchange
         self.client_socket.sendall(pkt.encode())
@@ -165,14 +167,14 @@ class OnionClient():
         # received "created" packet successfully -- store info in tables
         # store connection to first circID, the entry point to the circuit
         self.circuit_table.add_circuit_entry(
-            entry_node['ip'],
-            entry_node['port'],
-            self.entry_circID)
+            node['ip'],
+            node['port'],
+            self.circuit_id)
         print("Successfully sent the first 'create' packet")
 
         # TODO: Make sure that we should really reuse the same socket.
         self.client_socket.close()
-        del self.client_socket
+        self.client_socket = None
 
     def _send_extend_packet(self, node, layer):
         """
@@ -180,11 +182,13 @@ class OnionClient():
         building.
         """
         assert self.client_socket is None
+        assert self.circuit_id is not None
+        assert self._entry_node is not None
         
         # NOTE: validate how we create and/or reuse sockets.
         self.client_socket = socket.socket()
-        self.client_socket.connect((self.entry_node['ip'],
-                                    self.entry_node['port']))
+        self.client_socket.connect((self._entry_node['ip'],
+                                    self._entry_node['port']))
 
         key = enc.generate_fernet_key()
         ciphered_shared_key = enc.encrypt_RSA(
@@ -202,20 +206,12 @@ class OnionClient():
         # apply layers of encryption on shared key + key exchange before sending it
         encrypted_data = self.successive_encrypt(encrypted_data, layer)
 
-        pkt = pm.new_relay_packet(self.entry_circID, "extend", encrypted_data)
+        pkt = pm.new_relay_packet(self.circuit_id, "extend", encrypted_data)
 
         # send first half of key exchange
         self.client_socket.sendall(pkt.encode())
 
-        tries = 0
-        rec_bytes = None
-        while(tries < 30):
-            print("Waiting for a response:")
-            try:
-                rec_bytes = self.client_socket.recv(BUFFER_SIZE)
-            except socket.error as e:
-                print("Socket error:", e)
-            tries += 1
+        rec_bytes = self.client_socket.recv(BUFFER_SIZE)
 
         message = json.loads(rec_bytes.decode())
 
@@ -225,46 +221,67 @@ class OnionClient():
             )
             print("         Circuit building exiting. . .")
 
-        self.sender_key_table.add_key_entry(self.entry_circID, layer, key)
+        self.sender_key_table.add_key_entry(self.circuit_id, layer, key)
 
         self.client_socket.close()
-        del self.client_socket
+        self.client_socket = None
 
     def send_through_circuit(self, message):
         """
         called from exterior to tell client to send message through the circuit
         """
+        assert self.circuit_id is not None
+        assert self._entry_node is not None
+
         if not self.initialized:
             raise OnionRuntimeError(
                 "ERROR     Client not initialized. Call .connect() first.\n"
             )
 
-        # get entry point (currently fixed to only one)
-        # TODO build more circuits, select a random one in the table
-        ip, port = self.circuit_table.get_address(self.entry_circID).split(":")
+        # TODO:  make sure we shouldn't just reuse the same socket for
+        # multiple 'sends' (i.e. using a persistent relaying mechanism)
 
-        # TODO: this is already done, we already know the first node, since we
-        # used it in the circuit building portion.
-        # self._create(ip, int(port))
+        if self.client_socket is None:
+            # If we already had a client_socket, this means we are already
+            # connected with the entry node. No need to re-create the socket.
+            self.client_socket = socket.socket()
+            self.client_socket.connect((self._entry_node['ip'],
+                                        self._entry_node['port']))
 
         message = pm.new_payload(0, 0, message)
+
         # apply three encryption layers to message
-        encrypted_data = self.successive_encrypt(message, self.number_of_nodes)
+        encrypted_data = self.successive_encrypt(
+            message,
+            self.number_of_nodes_in_circuit
+        )
+
         pkt = pm.new_relay_packet(
-            self.entry_circID,
+            self.circuit_id,
             "relay_data",
             encrypted_data)
-        self._send(pkt)
 
-    def receive_from_circuit(self):
-        rec_bytes = self.client_socket.recv(BUFFER_SIZE)
-        message_str = rec_bytes.decode('utf-8')
+        self.client_socket.sendall(pkt.encode())
+
+    def receive_from_circuit(self, buffer_size=BUFFER_SIZE):
+        chunks_received = []
+        bytes_received_so_far = 0
+        done = False
+        while not done:
+            rec_bytes = self.client_socket.recv(buffer_size)
+            chunks_received.append(rec_bytes)
+            bytes_received_so_far += len(rec_bytes)
+            done = (rec_bytes == b'') or (bytes_received_so_far >= buffer_size)
+
+        received_bytes = b''.join(chunks_received)
+        message_str = received_bytes.decode('utf-8')
         message = json.loads(message_str)
         decrypted = self.successive_decrypt(message['encrypted_data'])
         payload = base64.urlsafe_b64decode(decrypted['data']).decode("UTF-8")
         return payload
 
     def successive_encrypt(self, message, layer_count):
+        assert self.circuit_id is not None
         """
         apply three encryption layers to message
         """
@@ -272,7 +289,7 @@ class OnionClient():
         # e.g. for node 2, apply layer 1 then layer 0
         encrypted_data = message
         for j in range(layer_count - 1, -1, -1):
-            key = self.sender_key_table.get_key(self.entry_circID, j)
+            key = self.sender_key_table.get_key(self.circuit_id, j)
             encrypted_data = enc.encrypt_fernet(encrypted_data, key)
         return encrypted_data
 
@@ -280,9 +297,9 @@ class OnionClient():
         """
         remove encryption layers (from node 0 to node 2)
         """
-        layer = self.sender_key_table.get_key(self.entry_circID, 0)
+        layer = self.sender_key_table.get_key(self.circuit_id, 0)
         payload = enc.decrypt_fernet(data, layer)
-        for i in range(1, self.number_of_nodes):
-            layer = self.sender_key_table.get_key(self.entry_circID, i)
+        for i in range(1, self.number_of_nodes_in_circuit):
+            layer = self.sender_key_table.get_key(self.circuit_id, i)
             payload = enc.decrypt_fernet(payload, layer)
         return payload
