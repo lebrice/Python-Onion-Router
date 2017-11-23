@@ -36,7 +36,7 @@ def main():
         action='store',
         dest='ip',
         type=str,
-        default=socket.gethostname()
+        default=socket.gethostname(),
         help='the ip to create the node on.'
     )
     parser.add_argument(
