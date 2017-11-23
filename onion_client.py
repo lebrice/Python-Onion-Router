@@ -38,7 +38,7 @@ class OnionClient():
         self.circuit_id = None
         self._entry_node = None
 
-    def connect_to_network(
+    def connect(
         self,
         directory_node_ip=DEFAULT_DIRECTORY_NODE_IP,
         directory_node_port=DEFAULT_DIRECTORY_NODE_PORT
@@ -47,8 +47,6 @@ class OnionClient():
             called from exterior to tell client to prepare for transmission
             - fetch network list
             - build circuit
-            NOTE: renamed from 'connect', in order not to get confused with
-            the 'socket.connect((ip, port))' method.
         """
 
         self._contact_dir_node(directory_node_ip, directory_node_port)

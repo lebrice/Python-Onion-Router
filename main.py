@@ -47,7 +47,7 @@ if __name__ == "__main__":
     node3.start()
 
     client = oc.OnionClient('127.0.0.1', 54320, args.node_count)
-    client.connect_to_network(dir_ip, dir_port)
+    client.connect(dir_ip, dir_port)
     #client.start()
 
     print("#####REQUESTING#####")
