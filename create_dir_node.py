@@ -41,7 +41,7 @@ def main():
 
     args = parser.parse_args()
 
-    dir_node = DirectoryNode(socket.gethostname(), int(args.port))
+    dir_node = DirectoryNode("142.157.16.133", int(args.port))
     dir_node.start()
 
     while("exit" not in input()):
