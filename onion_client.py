@@ -290,6 +290,8 @@ class OnionClient():
             try:
                 self.client_socket.sendall(pkt.encode())
             except ConnectionResetError:
+                # The remote host closed their end of the socket, we have to
+                # re-connect.
                 self.client_socket.close()
                 self.client_socket = socket.socket()
                 self.client_socket.connect(
