@@ -236,9 +236,11 @@ class DirectoryNode(Thread):
             recv_socket.settimeout(DEFAULT_TIMEOUT)
             recv_socket.bind((self.ip, self.port))
             recv_socket.listen()
+            print("LISTENING ON ", self.ip, ":", self.port)
             while self.running:
                 try:
                     client_socket, client_address = recv_socket.accept()
+                    print("GOT A CONNECTION FROM", client_address)
                     with client_socket:  # Closes it automatically.
                         client_socket.settimeout(DEFAULT_TIMEOUT)
                         rec_bytes = client_socket.recv(1024)

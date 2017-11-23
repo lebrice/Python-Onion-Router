@@ -25,8 +25,6 @@ def main():
             config = json.load(config_file)
             directory_node_ip = config['DIR_NODE_IP']
             directory_node_port = config['DIR_NODE_PORT']
-            print("Using Directory Node IP:", directory_node_ip)
-            print("Using Directory Node PORT:", directory_node_port)
     except FileNotFoundError:
         raise RuntimeWarning("'config.json' file not found")
 
@@ -58,6 +56,9 @@ def main():
     )
 
     args = parser.parse_args()
+
+    print("Using Directory Node IP:", args.dirIP)
+    print("Using Directory Node PORT:", args.dirPort)
 
     if args.port is None:
         raise RuntimeError("Invalid 'port' argument")
