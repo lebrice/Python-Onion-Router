@@ -47,11 +47,11 @@ if __name__ == "__main__":
     node3.start()
 
     client = oc.OnionClient('127.0.0.1', 54320, args.node_count)
-    client.connect(dir_ip, dir_port)
+    client.connect_to_network(dir_ip, dir_port)
     #client.start()
 
     print("#####REQUESTING#####")
-    client.send_through_circuit(args.url)
+    client.make_get_request_to_url(args.url)
     will = client.recv(10000)
     filename = 'returned.html'
     _write_to_html(filename, will)

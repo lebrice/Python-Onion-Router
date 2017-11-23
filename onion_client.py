@@ -22,6 +22,9 @@ DEFAULT_TIMEOUT = 1
 
 # socket.setdefaulttimeout(DEFAULT_TIMEOUT)
 
+DEFAULT_DIRECTORY_NODE_IP = socket.gethostname()
+DEFAULT_DIRECTORY_NODE_PORT = 12345
+
 
 class OnionClient():
     def __init__(self, ip, port, number_of_nodes):
@@ -38,17 +41,24 @@ class OnionClient():
         self.circuit_id = None
         self._entry_node = None
 
-    def connect(self, dir_ip, dir_port):
+    def connect_to_network(
+        self,
+        directory_node_ip=DEFAULT_DIRECTORY_NODE_IP,
+        directory_node_port=DEFAULT_DIRECTORY_NODE_PORT
+    ):
         """
             called from exterior to tell client to prepare for transmission
             - fetch network list
             - build circuit
+            NOTE: renamed from 'connect', in order not to get confused with
+            the 'socket.connect((ip, port))' method.
         """
-        self._contact_dir_node(dir_ip, dir_port)
+        
+        self._contact_dir_node(directory_node_ip, directory_node_port)
         self._build_circuit()
         self.initialized = True
 
-    def send(self, url):
+    def make_get_request_to_url(self, url):
         """
             called from exterior to tell client to send message through the circuit
         """
@@ -57,7 +67,21 @@ class OnionClient():
     def recv(self, buffer_size):
         """ Receives the given number of bytes from the Onion socket.
         """
-        return self.receive_from_circuit(buffer_size)
+        chunks_received = []
+        bytes_received_so_far = 0
+        done = False
+        while not done:
+            rec_bytes = self.client_socket.recv(buffer_size)
+            chunks_received.append(rec_bytes)
+            bytes_received_so_far += len(rec_bytes)
+            done = (rec_bytes == b'') or (bytes_received_so_far >= buffer_size)
+
+        received_bytes = b''.join(chunks_received)
+        message_str = received_bytes.decode('utf-8')
+        message = json.loads(message_str)
+        decrypted = self.successive_decrypt(message['encrypted_data'])
+        payload = base64.urlsafe_b64decode(decrypted['data']).decode("UTF-8")
+        return payload
 
     def _contact_dir_node(self, dir_ip, dir_port):
         """
@@ -264,21 +288,10 @@ class OnionClient():
         self.client_socket.sendall(pkt.encode())
 
     def receive_from_circuit(self, buffer_size=BUFFER_SIZE):
-        chunks_received = []
-        bytes_received_so_far = 0
-        done = False
-        while not done:
-            rec_bytes = self.client_socket.recv(buffer_size)
-            chunks_received.append(rec_bytes)
-            bytes_received_so_far += len(rec_bytes)
-            done = (rec_bytes == b'') or (bytes_received_so_far >= buffer_size)
-
-        received_bytes = b''.join(chunks_received)
-        message_str = received_bytes.decode('utf-8')
-        message = json.loads(message_str)
-        decrypted = self.successive_decrypt(message['encrypted_data'])
-        payload = base64.urlsafe_b64decode(decrypted['data']).decode("UTF-8")
-        return payload
+        """
+        moved to recv() for clarity.
+        """
+        return recv(buffer_size)
 
     def successive_encrypt(self, message, layer_count):
         assert self.circuit_id is not None
