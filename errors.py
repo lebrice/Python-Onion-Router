@@ -17,3 +17,7 @@ class OnionNetworkError(OnionError):
 
 class OnionRuntimeError(OnionError):
     pass
+
+
+class OnionClientError(OnionError):
+    pass

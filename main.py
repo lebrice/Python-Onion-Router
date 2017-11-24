@@ -51,7 +51,8 @@ if __name__ == "__main__":
     #client.start()
 
     print("#####REQUESTING#####")
-    will = client.send_through_circuit(args.url)
+    client.make_get_request_to_url(args.url)
+    will = client.recv(10000)
     filename = 'returned.html'
     _write_to_html(filename, will)
 
