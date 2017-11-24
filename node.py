@@ -25,14 +25,16 @@ DEFAULT_TIMEOUT = 1  # timeout value for all blocking socket operations.
 DIRECTORY_NODE_IP = socket.gethostname()
 DIRECTORY_NODE_PORT = 12345
 
+DEFAULT_NODE_IP = socket.gethostname()
+DEFAULT_NODE_PORT = 12345
 
 class OnionNode(threading.Thread):
     """A Node in the onion-routing network"""
 
     def __init__(
         self,
-        ip,
-        port,
+        ip=DEFAULT_NODE_IP,
+        port=DEFAULT_NODE_PORT,
         directory_node_ip=DIRECTORY_NODE_IP,
         directory_node_port=DIRECTORY_NODE_PORT
     ):
@@ -178,7 +180,7 @@ class DirectoryNode(Thread):
             - update:  updates the client's information
     """
 
-    def __init__(self, ip, port):
+    def __init__(self, ip=DIRECTORY_NODE_IP, port=DIRECTORY_NODE_PORT):
         super().__init__()
         self.ip = ip
         self.port = port
