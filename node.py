@@ -11,7 +11,7 @@ import types
 from socket import SocketType
 from typing import List, Dict
 
-from messaging import IpInfo
+from messaging import ToDictMixin, JsonConversionMixin
 import circuit_tables as ct
 import errors
 from relaying import IntermediateRelay
@@ -167,6 +167,25 @@ class OnionNode(threading.Thread):
             self.network_list = message['table']
 
 
+class NodeInfo(ToDictMixin):
+    def __init__(self, ip, port, public_exp, modulus):
+        self.ip = ip
+        self.port = port
+        self.public_exp = public_exp
+        self.modulus = modulus
+
+
+class NetworkInfo(ToDictMixin, JsonConversionMixin):
+    def __init__(self, nodes_in_network=[]):
+        self.nodes_in_network = nodes_in_network
+
+    def __repr__(self):
+        """
+        Returns a Json-formatted string representation of the message.
+        """
+        return self.to_json_string()
+
+
 class DirectoryNode(Thread):
     """
         Contains information on all nodes
@@ -186,65 +205,25 @@ class DirectoryNode(Thread):
         self.port = port
         self._running_flag = False
         self._running_lock = Lock()
+        self.network_info = NetworkInfo()
 
-        self.create_json()
+    def save_network_info_to_json(self, filename):
+        """
+        saves the current network information to a file.
+        NOTE: raises all IO-related exceptions.
+        """
+        with open(filename, "w") as file:
+            json.dump(self.network_info.to_dict(), file)
 
-    def create_json(self):
-        # create the network file if it doesn't exist,
-        try:
-            f = open('network_list.json', 'x')
-        except FileExistsError:
-            f = open('network_list.json', 'w')
-            f.seek(0)
-
-        new = {'nodes in network': []}
-        json.dump(new, f)
-        f.close()
-
-    def write_to_json(self, ip, port, public_exp, modulus):
-        try:
-            with open('network_list.json', 'r') as f:
-                data = json.load(f)
-        except FileNotFoundError:
-            print("ERROR    network_list.json does not exist. Use create_json to create it\n")
-            return
-
-        # if a node is already in the list, then it is trying to update its RSA info
-        updated = 0
-        test = len(data['nodes in network'])
-
-        if len(data['nodes in network']) > 0:
-            for n in data['nodes in network']:
-                if n['ip'] == ip and n['port'] == port:
-                    n['public_exp'] = public_exp
-                    n['modulus'] = modulus
-                    updated = 1
-
-        # node is new: add it to network file
-        if updated == 0:
-            new_entry = {
-                'ip': ip,
-                'port': port,
-                'public_exp': public_exp,
-                'modulus': modulus
-            }
-            data['nodes in network'].append(new_entry)
-            updated = 1
-
-        with open('network_list.json', 'w') as f:
-            f.seek(0)
-            json.dump(data, f, indent=4)
-
-        return updated
+    def _add_or_update_node_info(self, new_node_info):
+        for index, node_info in enumerate(self.network_info.nodes_in_network):
+            if (node_info.ip == new_node_info.ip) and (node_info.port == new_node_info.port):
+                self.network_info.nodes_in_network[index] = new_node_info
+                return
+        self.network_info.nodes_in_network.append(new_node_info)
 
     def return_json(self):
-        try:
-            with open('network_list.json', 'r') as f:
-                data = json.load(f)
-            return data
-        except FileNotFoundError:
-            print("ERROR    network_list.json does not exist. Use create_json to create it\n")
-            return
+        return self.network_info.to_json_string()
 
     def run(self):
         self.running = True
@@ -256,25 +235,34 @@ class DirectoryNode(Thread):
             while self.running:
                 try:
                     client_socket, client_address = recv_socket.accept()
-                    with client_socket:  # Closes it automatically.
-                        client_socket.settimeout(DEFAULT_TIMEOUT)
-                        rec_bytes = client_socket.recv(1024)
-                        message = json.loads(rec_bytes.decode())
+                    client_socket.settimeout(DEFAULT_TIMEOUT)
+                    rec_bytes = client_socket.recv(BUFFER_SIZE)
+                    message = json.loads(rec_bytes.decode())
 
-                        if message['type'] != "dir":
-                            # invalid message, ignore
-                            client_socket.close()
-                            continue
-
-                        updated = 0
-                        if message['command'] == "dir_update":
-                            updated = self.write_to_json(message['ip'], message['port'], message['public_exp'], message['modulus'])
-
-                        pkt = pm.new_dir_packet("dir_answer", updated, self.return_json())
-                        message_bytes = pkt.encode('utf-8')
-                        #client_socket.connect((ip, port))
-                        client_socket.sendall(message_bytes)
+                    if message['type'] != "dir":
+                        # invalid message, ignore
                         client_socket.close()
+                        continue
+
+                    if message['command'] == "dir_update":
+                        info = NodeInfo(
+                            message['ip'],
+                            message['port'],
+                            message['public_exp'],
+                            message['modulus']
+                        )
+                        self._add_or_update_node_info(info)
+                        self.save_network_info_to_json("network_info.json")
+
+                    pkt = pm.new_dir_packet(
+                        "dir_answer",
+                        1,  # NOTE: Previous bug, 'updated' was equal to '1' in all cases.
+                        self.return_json()
+                    )
+                    message_bytes = pkt.encode('utf-8')
+                    #client_socket.connect((ip, port))
+                    client_socket.sendall(message_bytes)
+                    client_socket.close()
 
                 except socket.timeout:
                     continue  # Try again.
