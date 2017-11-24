@@ -15,7 +15,7 @@ import base64
 
 import circuit_tables as ct
 import encryption as enc
-from errors import OnionError, OnionRuntimeError
+from errors import OnionError, OnionRuntimeError, OnionClientError
 
 BUFFER_SIZE = 4096
 
@@ -72,7 +72,7 @@ class OnionClient():
         URL through the circuit.
         """
         if not self.initialized:
-            raise OnionRuntimeError(
+            raise OnionClientError(
                 """
                 ERROR: Node was not initialized properly.
                 Call connect_to_directory() first.
@@ -165,25 +165,29 @@ class OnionClient():
     def _select_random_nodes(self):
         current_node_count = len(self.network_list['nodes in network'])
         if current_node_count < self.number_of_nodes_in_circuit:
-            raise OnionRuntimeError(
+            raise OnionClientError(
                 "ERROR    There are not enough nodes to build the circuit",
                 "Current: ",
                 current_node_count,
                 "requested",
-                self.number_of_nodes_in_circuit)
+                self.number_of_nodes_in_circuit
+            )
 
-        result = random.sample(
+        nodes = random.sample(
             self.network_list['nodes in network'],
             self.number_of_nodes_in_circuit
         )
-        return result
+        return nodes
 
     def _generate_new_circID(self):
+        """
+        Generate a new unique Circuit ID, between 0 and 10000
+        """
         # define a limit to how many circuits the node can be part of
         max_circuit_no = 100
 
         if self.circuit_table.get_length() == max_circuit_no:
-            raise OnionRuntimeError(
+            raise OnionClientError(
                 "ERROR    Too many active circuits; could not create circuit.",
                 "Current max is ", max_circuit_no,
                 "\nTry deleting a circuit before creating a new one"
