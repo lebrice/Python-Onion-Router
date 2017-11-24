@@ -22,14 +22,25 @@ import packet_manager as pm
 
 DEFAULT_TIMEOUT = 1  # timeout value for all blocking socket operations.
 
+DIRECTORY_NODE_IP = socket.gethostname()
+DIRECTORY_NODE_PORT = 12345
+
 
 class OnionNode(threading.Thread):
     """A Node in the onion-routing network"""
 
-    def __init__(self, ip, port):
+    def __init__(
+        self,
+        ip,
+        port,
+        directory_node_ip=DIRECTORY_NODE_IP,
+        directory_node_port=DIRECTORY_NODE_PORT
+    ):
         super().__init__()
         self.ip = ip
         self.port = port
+        self.directory_node_ip = directory_node_ip
+        self.directory_node_port = directory_node_port
 
         self.network_list = {}
 
@@ -86,14 +97,14 @@ class OnionNode(threading.Thread):
 
         NOTE: from threading.Thread
         """
-        self._contact_dir_node(dir_ip, dir_port)
+        self._get_nodes_in_network()
         super().start()
         self.initialized = True
 
     def stop(self):
         """
-        tells the node to shutdown.
-        TODO: contact directory node to let it know we're shutting down. 
+        tells the node to shut itself down.
+        TODO: contact directory node to let it know we're shutting down.
         """
         self.running = False
         #self.join()
@@ -104,7 +115,30 @@ class OnionNode(threading.Thread):
         """
         print("WARNING: the 'connect' method is deprecated.")
 
-    def _contact_dir_node(self, dir_ip, dir_port):
+    @contextmanager
+    def _connect_to_directory_node(self):
+        """
+        attempts to connect to the directory node, and returns the resulting
+        socket.
+        NOTE: to be used in a statement like:
+        "with _connect_to_directory_node() as X:"
+        """
+        _socket = socket.socket()
+        try:
+            _socket.connect(
+                (self.directory_node_ip, self.directory_node_port)
+            )
+        except ConnectionRefusedError as e:
+            raise errors.OnionNetworkError(
+                "Unable to connect with Directory Node at Address:",
+                (self.directory_node_ip, self.directory_node_port)
+            )
+        else:
+            yield _socket
+        finally:
+            _socket.close()
+
+    def _get_nodes_in_network(self):
         """
             make the node known to the directory node
             contact directory node with a dir_update packet
@@ -112,58 +146,23 @@ class OnionNode(threading.Thread):
                 ip, port (known through socket)
                 public rsa keys of this node
             dir node answers with a list of all nodes in onion network
-
         """
+        pkt = pm.new_dir_packet(
+            "dir_update",
+            (self.ip, self.port),
+            self.rsa_keys
+        )
 
-        pkt = pm.new_dir_packet("dir_update", (self.ip, self.port), self.rsa_keys)
-        self._create(dir_ip, dir_port)
-        self._send(pkt)
+        with self._connect_to_directory_node() as client_socket:
+            client_socket.sendall(pkt.encode())
+            received_bytes = client_socket.recv(BUFFER_SIZE)
+            message = json.loads(rec_bytes.decode())
 
-        # wait for a response packet; 3 tries
-        tries = 3
-        rec_bytes = 0
-        while tries != 0:
-            try:
-                rec_bytes = self.client_socket.recv(BUFFER_SIZE)
-                break
-            except socket.timeout:
-                tries -= 1
-                if tries == 0:
-                    print("ERROR    Timeout while waiting for confirmation packet [3 tries]\n")
-                    print("         Directory connection exiting. . .")
-                    self._close()
-                    return
-                continue
-
-        message = json.loads(rec_bytes.decode())
-
-        if message['type'] != "dir":
-            print("ERROR    Unexpected answer from directory")
-            self._close()
-            return
-
-        self.network_list = message['table']
-        self._close()
-
-
-
-    def _create(self, ip, port):
-        self.client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.client_socket.connect((ip, port))
-
-    def _send(self, message_str):
-        message_bytes = message_str.encode('utf-8')
-        self.client_socket.sendall(message_bytes)
-
-    def _close(self):
-        self.client_socket.close()
-
-# def convert_to_ip_info(list_of_lists):
-#     """ Helper method that converts a list of lists into a list of tuples. """
-#     tuples = []
-#     for ip, port in list_of_lists:
-#         tuples.append(IpInfo(ip, port))
-#     return tuples
+            if message['type'] != "dir":
+                raise errors.OnionRuntimeError(
+                    "ERROR: Unexpected answer from directory"
+                )
+            self.network_list = message['table']
 
 
 class DirectoryNode(Thread):
@@ -171,7 +170,8 @@ class DirectoryNode(Thread):
         Contains information on all nodes
         each node has the following information:
             - ip address : receiving port
-            - public rsa key pair (e, n) = (public exp, modulus) to be used for key exchange
+            - public rsa key pair (e, n) = (public exp, modulus) to be used
+            for key exchange
 
         the directory node can do the following:
             - answer:  sends the network_info.json file to client
