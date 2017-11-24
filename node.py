@@ -13,6 +13,7 @@ from typing import List, Dict
 
 from messaging import IpInfo
 import circuit_tables as ct
+import errors
 from relaying import IntermediateRelay
 from workers import *
 import encryption as enc
@@ -50,29 +51,58 @@ class OnionNode(threading.Thread):
         """
         self.running = True
 
-        if self.initialized:
-            with socket.socket() as receiving_socket:
-                receiving_socket.settimeout(DEFAULT_TIMEOUT)
-                receiving_socket.bind((self.ip, self.port))
-                receiving_socket.listen()
-                while self.running:
-                    # Wait for the next message to arrive.
-                    try:
-                        client_socket, address = receiving_socket.accept()
-                        client_thread = ns.NodeSwitchboard(client_socket, address,
-                                                           self.circuit_table,
-                                                           self.node_key_table,
-                                                           self.node_relay_table,
-                                                           self.rsa_keys, self.ip, self.port)
-                        client_thread.start()
-                    except socket.timeout:
-                        continue
-        else:
-            print("ERROR    Node not initialized. Call node.connect() first")
+        if not self.initialized:
+            raise errors.OnionRuntimeError(
+                "ERROR    Node not initialized. Call node.connect() first"
+            )
+
+        with socket.socket() as receiving_socket:
+            receiving_socket.settimeout(DEFAULT_TIMEOUT)
+            receiving_socket.bind((self.ip, self.port))
+            receiving_socket.listen()
+            while self.running:
+                # Wait for the next message to arrive.
+                try:
+                    client_socket, address = receiving_socket.accept()
+                    client_thread = ns.NodeSwitchboard(
+                        client_socket,
+                        address,
+                        self.circuit_table,
+                        self.node_key_table,
+                        self.node_relay_table,
+                        self.rsa_keys,
+                        self.ip,
+                        self.port
+                    )
+                    client_thread.start()
+                except socket.timeout:
+                    continue
+
+        self.shutdown()
+
+    def start(self):
+        """
+        Start the OnionNode
+
+        NOTE: from threading.Thread
+        """
+        self._contact_dir_node(dir_ip, dir_port)
+        super().start()
+        self.initialized = True
+
+    def stop(self):
+        """
+        tells the node to shutdown.
+        TODO: contact directory node to let it know we're shutting down. 
+        """
+        self.running = False
+        #self.join()
 
     def connect(self, dir_ip, dir_port):
-        self._contact_dir_node(dir_ip, dir_port)
-        self.initialized = True
+        """
+        NOTE: Deprecated. Already taken care of in the 'start()' method.
+        """
+        print("WARNING: the 'connect' method is deprecated.")
 
     def _contact_dir_node(self, dir_ip, dir_port):
         """
@@ -115,21 +145,6 @@ class OnionNode(threading.Thread):
         self.network_list = message['table']
         self._close()
 
-    @property
-    def running(self):
-        """ returns if the node is currently running """
-        with self._running_lock:
-            return self._running_flag
-
-    @running.setter
-    def running(self, value):
-        with self._running_lock:
-            self._running_flag = value
-
-    def stop(self):
-        """ tells the node to shutdown. """
-        self.running = False
-        #self.join()
 
 
     def _create(self, ip, port):
