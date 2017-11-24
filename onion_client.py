@@ -38,7 +38,7 @@ class OnionClient():
         self.circuit_id = None
         self._entry_node = None
 
-    def connect(
+    def connect_to_directory(
         self,
         directory_node_ip=DEFAULT_DIRECTORY_NODE_IP,
         directory_node_port=DEFAULT_DIRECTORY_NODE_PORT
@@ -53,21 +53,35 @@ class OnionClient():
         self._build_circuit()
         self.initialized = True
 
+    def connect(
+        self,
+        directory_node_ip=DEFAULT_DIRECTORY_NODE_IP,
+        directory_node_port=DEFAULT_DIRECTORY_NODE_PORT
+    ):
+        """
+        NOTE: Moved to connect_to_directory_node.
+        TODO: Change this connect method to more closely match the
+        socket.connect((ip, port)) method, where the ip, port are the
+        remote host, not the directory node.
+        """
+        self.connect_to_directory()
+
     def make_get_request_to_url(self, url):
         """
         called from exterior to tell client to make a get request to the given
         URL through the circuit.
         """
-        assert self.circuit_id is not None
-        assert self._entry_node is not None
-
         if not self.initialized:
             raise OnionRuntimeError(
-                "ERROR     Client not initialized. Call .connect() first.\n"
+                """
+                ERROR: Node was not initialized properly.
+                Call connect_to_directory() first.
+                """
             )
 
         # TODO:  make sure we shouldn't just reuse the same socket for
-        # multiple 'sends' (i.e. using a persistent relaying mechanism)
+        # multiple 'sends' to the same circuit ID
+        # (i.e. using a persistent relaying mechanism)
 
         if self.client_socket is None:
             # If we already had a client_socket, this means we are already
@@ -154,7 +168,7 @@ class OnionClient():
             raise OnionRuntimeError(
                 "ERROR    There are not enough nodes to build the circuit",
                 "Current: ",
-                len(self.network_list),
+                current_node_count,
                 "requested",
                 self.number_of_nodes_in_circuit)
 
