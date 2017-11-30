@@ -40,8 +40,8 @@ def decrypt_fernet(message, key):
     #message_str = message.decode('utf-8')
     #message_bytes = cipher_suite.decrypt(message_str)
     message_bytes = cipher_suite.decrypt(message_str)
-    #test = json.loads(message_bytes.encode('utf-8'))
-    test = json.loads(message_bytes)
+    test = json.loads(message_bytes.decode())
+    # test = json.loads(message_bytes)
     return test
 
 

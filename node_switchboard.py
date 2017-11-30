@@ -108,7 +108,6 @@ class NodeSwitchboard(Thread):
             print("ERROR    Received message has invalid type\n")
             return
 
-
     def _process_relay(self, message):
         # message is going forwards,  decrypt one layer
         if message['command'] == "extend" or message['command'] == "relay_data":
@@ -129,10 +128,13 @@ class NodeSwitchboard(Thread):
                     #self._sendExtend(pkt, decrypted_payload['ip'], decrypted_payload['port'])
                     #self._send(pkt, decrypted_payload['ip'], decrypted_payload['port'])
                 elif message['command'] == "relay_data":
+
+
                     # fully decrypted a relay_data packet
                     # -> node is an exit node; make a GET request, wait for answer,
                     #    send encrypted answer back to connecting node using same key
                     ans = base64.urlsafe_b64encode(gr.web_request(decrypted_payload['data'])).decode("UTF-8")
+                    
                     if ans == '':
                         print("ERROR    Could not complete get request; sending back gibberish")
                         ans = ''.join(random.SystemRandom().choice(string.ascii_uppercase + string.digits) for _ in
@@ -140,10 +142,15 @@ class NodeSwitchboard(Thread):
 
                     # TODO: place address of website here
                     payload = pm.new_relay_payload(0, 0, ans)
+
+                    print("FORWARDING MESSAGE TO NETWORK:")
+                    print(json.dumps(payload, indent='\t'), "\n")
+
                     encrypted_payload = enc.encrypt_fernet(payload, key)
 
                     pkt = pm.new_relay_packet(message['circID'], "relay_ans", encrypted_payload)
                     ip, port = self.circuit_table.get_address(message['circID']).split(':')
+
                     #oli garbage
                     self._send(pkt)
                     #self._relay(pkt, ip, port)
@@ -151,10 +158,16 @@ class NodeSwitchboard(Thread):
             else:
                 # could not decrypt payload, meant for a node further along
                 # -> get next node addr from table, replace circID, remove one layer, and send packet along
+
+                if(message['command'] != "extend"):
+                    print("FORWARDING MESSAGE IN CIRCUIT:")
+                    print(json.dumps(message, indent='\t'), "\n")
+
                 destID = self.node_relay_table.get_dest_id(message['circID'])
                 message['circID'] = destID
                 message['encrypted_data'] = decrypted_payload
                 ip, port = self.circuit_table.get_address(message['circID']).split(':')
+                
                 #oli garbage
                 #self._send(message)
                 self._relay(json.dumps(message), ip, int(port))
