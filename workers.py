@@ -2,154 +2,112 @@
 """
 Defines Workers that will be used to carry out various tasks.
 """
-from threading import Thread
-from queue import Queue
-
-
-class ClosableQueue(Queue):
-    """
-    Queue subclass that can be closed. By closing the Queue,
-    the threads that are consuming its output are stopped.
-    """
-    SENTINEL = object()
-
-    def close(self):
-        self.put(self.SENTINEL)
-
-    def __iter__(self):
-        while True:
-            item = self.get()
-            try:
-                if item is self.SENTINEL:
-                    return  # Cause the thread to exit.
-                yield item
-            finally:
-                self.task_done()
-
-
-class Worker(Thread):
-    """
-    Takes items from the :in_queue:, executes :func: on them,
-    then places the results on its :out_queue:. 
-    Automatically stops whenever the :in_queue.close(): method is called.
-
-    *(see ClosableQueue)*
-    """
-    def __init__(self, func, in_queue, out_queue):
-        super().__init__()
-        self.func = func
-        self.in_queue = in_queue
-        self.out_queue = out_queue
-
-    def run(self):
-        for item in self.in_queue:
-            result = self.func(item)
-            self.out_queue.put(result)
-
-
-class SplitterWorker(Thread):
-    """
-    Worker that takes an item from its :in_queue:, and then runs :func: on it.
-    
-    *func(item) -> bool*
-
-    If :func(item): returns :True:, the item is placed on :out_queue_a:
-    If :func(item): returns :False:, the item is placed on :out_queue_b:
-    """
-    def __init__(self, func, in_queue, out_queue_a, out_queue_b):
-        super().__init__()
-        self.func = func
-        self.in_queue = in_queue
-        self.out_queue_a = out_queue_a
-        self.out_queue_b = out_queue_b
-
-    def run(self):
-        for item in self.in_queue:
-            condition = self.func(item)
-            if condition:
-                self.out_queue_a.put(item)
-            else:
-                self.out_queue_b.put(item)
-
+from contextlib import contextmanager
+from threading import Thread, Lock
+from typing import List
 import socket
+from socket import SocketType
+
 from messaging import OnionMessage
+from queues import ClosableQueue
+
+BUFFER_SIZE = 4096
+
 
 class SocketReader(Thread):
     """
-    Takes the data from a Socket, and tries to parse it into sequences of messages.
-    Parses each message into :out_queue:
+    Reads from a given socket, and whenever it receives a message, adds it
+    in the given received_messages list.
     """
-    def __init__(self, receiving_port, out_queue):
+    def __init__(self, _socket: SocketType, received_messages: List):
         super().__init__()
-        self.receiving_port = receiving_port
-        self.out_queue = out_queue
-        self.running = False
-    
+        self.recv_socket = _socket
+        self.received_messages = received_messages
+        self.closed = False
+
     def run(self):
-        self.running = True
-        # Create the receiving socket
-        with socket.socket() as recv_socket:
-            host = socket.gethostname()
-            recv_socket.bind((host, self.receiving_port))
-            recv_socket.listen()
+        received_so_far = ""
 
-            bytes_received = 0
+        empty = False
 
-            while self.running:
-                client_socket, address = recv_socket.accept()
+        while not empty:
+            try:
+                received_bytes = self.recv_socket.recv(BUFFER_SIZE)
+            except ConnectionAbortedError as e:
+                break
+            else:
+                empty = (received_bytes == b'')
+                if empty:
+                    break
+                received_string = str(received_bytes, encoding="UTF-8")
+                received_so_far += received_string
 
-                buffer = client_socket.recv(1024)
-                print("Received:", buffer)
+                received_objects = split_into_objects_and_lengths(received_so_far)
 
-                is_valid = False
-                try:
-                    string = str(buffer, encoding='UTF-8')
-                    is_valid = OnionMessage.is_valid_string(string)
-                    print("is_valid:", is_valid)
-                    
+                for obj, length in received_objects:
+                    self.received_messages.append(obj)
+                    # Remove the bytes we used.
+                    received_so_far = received_so_far[length:]
 
-                except UnicodeDecodeError as err:
-                    print("invalid")
-                else:
-                    message = OnionMessage.from_json_string(string)
-                    self.out_queue.put(message)
+        self.recv_socket.close()
+        self.closed = True
 
-    def stop(self):
-        self.running = False
-        self.join()
 
-def main():
-    received_messages = ClosableQueue(10)
-    reader = SocketReader(12345, received_messages)
-    reader.start()
-
-    sender = Thread(target=send)
-    sender.start()
-    sender.join()
-    reader.stop()
-    reader.join()
-
-    message = received_messages.get()
-    print("successfully received:", message)
-
-def send():
-    sock = socket.socket()
-    remote_host = socket.gethostname()
-    remote_host_port = 12345
-    sock.connect((remote_host, remote_host_port))
-
-    bob = """
-        {
-            "header": "ONION ROUTING G12",
-            "source": "127.0.0.1",
-            "destination": "",
-            "data": null
-        }
+def split_into_objects_and_lengths(string):
     """
-    message = OnionMessage.from_json_string(bob)
-    sock.send(message.to_bytes())
-    return
+    splits the given string into a series of tuples:
+    (JSON object, length of string used to create that object).
+    """
+    import json
+    string_so_far = ""
+    open_bracket_count = 0
+    closed_bracket_count = 0
+    for char in string:
+        string_so_far += char
+        if char == '{':
+            open_bracket_count += 1
+        elif char == '}':
+            closed_bracket_count += 1
+        if open_bracket_count == closed_bracket_count:
+            try:
+                obj = json.loads(string_so_far)
+                # Return the object, since the parsing worked.
+                yield (obj, len(string_so_far))
+
+            except json.JSONDecodeError:
+                pass  # OK. that wasn't a valid json. Keep trying.
+
+            else:
+                # No exceptions ocurred. We reset the counter variables.
+                string_so_far = ""
+                open_bracket_count = 0
+                closed_bracket_count = 0
 
 
-if __name__ == '__main__':
-    main()
+def split_into_objects(string):
+    """
+    splits the given string into a series of JSON objects.
+    """
+    import json
+    string_so_far = ""
+    open_bracket_count = 0
+    closed_bracket_count = 0
+    for char in string:
+        string_so_far += char
+        if char == '{':
+            open_bracket_count += 1
+        elif char == '}':
+            closed_bracket_count += 1
+        if open_bracket_count == closed_bracket_count:
+            try:
+                obj = json.loads(string_so_far)
+                yield obj  # Return the object, since the parsing worked.
+
+            except json.JSONDecodeError:
+                pass  # OK. that wasn't a valid json. Keep trying.
+
+            else:
+                # No exceptions ocurred. We reset the counter variables.
+                string_so_far = ""
+                open_bracket_count = 0
+                closed_bracket_count = 0
