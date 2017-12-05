@@ -100,8 +100,8 @@ class OnionNode(threading.Thread):
         NOTE: from threading.Thread
         """
         self._get_nodes_in_network()
-        super().start()
         self.initialized = True
+        super().start()
 
     def stop(self):
         """
@@ -110,6 +110,12 @@ class OnionNode(threading.Thread):
         """
         self.running = False
         #self.join()
+
+    def shutdown(self):
+        """
+        TODO: shut down the node, let the directory node know.
+        """
+        pass
 
     def connect(self, dir_ip, dir_port):
         """
@@ -158,7 +164,7 @@ class OnionNode(threading.Thread):
         with self._connect_to_directory_node() as client_socket:
             client_socket.sendall(pkt.encode())
             received_bytes = client_socket.recv(BUFFER_SIZE)
-            message = json.loads(rec_bytes.decode())
+            message = json.loads(received_bytes.decode())
 
             if message['type'] != "dir":
                 raise errors.OnionRuntimeError(
@@ -183,7 +189,7 @@ class NetworkInfo(ToDictMixin, JsonConversionMixin):
         """
         Returns a Json-formatted string representation of the message.
         """
-        return self.to_json_string()
+        return json.dumps(self.to_dict(), indent='\t')
 
 
 class DirectoryNode(Thread):
@@ -213,7 +219,7 @@ class DirectoryNode(Thread):
         NOTE: raises all IO-related exceptions.
         """
         with open(filename, "w") as file:
-            json.dump(self.network_info.to_dict(), file)
+            json.dump(self.network_info.to_dict(), file, indent='\t')
 
     def _add_or_update_node_info(self, new_node_info):
         for index, node_info in enumerate(self.network_info.nodes_in_network):
